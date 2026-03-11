@@ -1,0 +1,14 @@
+[build]
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/proxy"
+  to = "/.netlify/functions/proxy"
+  status = 200
+```
+
+4. **Commit directly to main**
+
+Aspetta 2 minuti che Netlify rebuilda, poi riprova:
+```
+https://trackerbbx.netlify.app/api/proxy?url=https://httpbin.org/get
