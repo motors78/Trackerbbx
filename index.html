@@ -118,7 +118,7 @@
 <header>
   <div>
     <div class="logo">⚽ <span>Tracker</span> Serie B X</div>
-    <div class="sub" id="bankroll-sub">Bankroll: 150€</div>
+    <div class="sub" id="bankroll-sub">Bankroll: 10€</div>
   </div>
   <div class="tabs">
     <button class="tab-btn active" onclick="showTab('dashboard')">📊 Dashboard</button>
@@ -217,7 +217,6 @@
 
   <!-- STATISTICHE -->
   <div id="page-statistiche">
-    <!-- KELLY CRITERION -->
     <div class="kelly-box">
       <div style="font-weight:700;font-size:15px;color:#48bb78;margin-bottom:14px">🧮 Kelly Criterion — Calcola la puntata ottimale</div>
       <div style="font-size:13px;color:#718096;margin-bottom:14px;line-height:1.6">
@@ -226,7 +225,7 @@
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:14px">
         <div class="form-group"><label>Quota bookmaker</label><input type="number" step="0.01" id="k-quota" placeholder="Es: 2.50" oninput="calcolaKelly()"></div>
         <div class="form-group"><label>Tua prob. stimata %</label><input type="number" step="1" id="k-prob" placeholder="Es: 55" oninput="calcolaKelly()"></div>
-        <div class="form-group"><label>Bankroll attuale €</label><input type="number" step="1" id="k-bankroll" placeholder="Es: 150" oninput="calcolaKelly()"></div>
+        <div class="form-group"><label>Bankroll attuale €</label><input type="number" step="1" id="k-bankroll" placeholder="Es: 10" oninput="calcolaKelly()"></div>
         <div class="form-group"><label>Frazione Kelly %</label>
           <select id="k-fraz" oninput="calcolaKelly()">
             <option value="1">100% (aggressivo)</option>
@@ -242,14 +241,10 @@
         <div class="kelly-warning" id="kelly-warning"></div>
       </div>
     </div>
-
-    <!-- ROI PER CATEGORIA -->
     <div class="card">
       <div class="card-title">📊 ROI per tipo di scommessa</div>
       <div id="roi-categoria"></div>
     </div>
-
-    <!-- ROI PER CAMPIONATO -->
     <div class="card">
       <div class="card-title">🌍 ROI per campionato</div>
       <div id="roi-campionato"></div>
@@ -366,20 +361,16 @@ function calcolaKelly() {
   const bankroll = parseFloat(document.getElementById("k-bankroll").value);
   const fraz = parseFloat(document.getElementById("k-fraz").value);
   const res = document.getElementById("kelly-result");
-
   if (isNaN(quota) || isNaN(prob) || isNaN(bankroll) || quota <= 1 || prob <= 0 || prob >= 1) {
     res.style.display = "none"; return;
   }
-
-  const b = quota - 1; // profitto netto per €1 puntato
-  const q = 1 - prob;  // probabilità di perdere
-  const kelly = (b * prob - q) / b; // formula Kelly
+  const b = quota - 1;
+  const q = 1 - prob;
+  const kelly = (b * prob - q) / b;
   const kellyFrazionato = kelly * fraz;
   const puntata = Math.max(0, kellyFrazionato * bankroll);
-
   res.style.display = "block";
   const warn = document.getElementById("kelly-warning");
-
   if (kelly <= 0) {
     document.getElementById("kelly-amount").textContent = "0€ — Non scommettere";
     document.getElementById("kelly-amount").style.color = "#fc8181";
@@ -412,11 +403,10 @@ function calcRoiPerGruppo(campo) {
 }
 
 function renderStatistiche() {
-  // ROI per categoria
   const catGruppi = calcRoiPerGruppo("categoria");
   const catEl = document.getElementById("roi-categoria");
   if (!Object.keys(catGruppi).length) {
-    catEl.innerHTML = '<div class="empty">Nessun dato disponibile ancora.</div>'; 
+    catEl.innerHTML = '<div class="empty">Nessun dato disponibile ancora.</div>';
   } else {
     catEl.innerHTML = `<table class="stats-table">
       <thead><tr><th>Categoria</th><th>V/P</th><th>Puntato</th><th>Utile</th><th>ROI</th><th>Win Rate</th></tr></thead>
@@ -435,8 +425,6 @@ function renderStatistiche() {
       }).join("")}</tbody>
     </table>`;
   }
-
-  // ROI per campionato
   const campGruppi = calcRoiPerGruppo("campionato");
   const campEl = document.getElementById("roi-campionato");
   if (!Object.keys(campGruppi).length) {
@@ -459,8 +447,6 @@ function renderStatistiche() {
       }).join("")}</tbody>
     </table>`;
   }
-
-  // Pre-compila bankroll nel Kelly
   const st = calcStats();
   const kb = document.getElementById("k-bankroll");
   if (!kb.value) kb.value = fmt(st.bankroll);
@@ -679,7 +665,7 @@ function chiediElimina(idx) {
 function chiudiModal() { document.getElementById("modal").style.display="none"; deleteIdx=null; }
 function confermaElimina() { if (deleteIdx!==null) { scommesse.splice(deleteIdx,1); salvaLS(); renderAll(); } chiudiModal(); }
 
-// ===== FETCH QUOTE + ODDS MOVEMENT =====
+// ===== FETCH QUOTE CON PROXY NETLIFY =====
 async function fetchOdds() {
   const lega=document.getElementById("lega-select").value;
   const btn=document.getElementById("btn-fetch");
@@ -689,37 +675,60 @@ async function fetchOdds() {
   res.innerHTML='<div class="empty"><span class="spinner"></span> Recupero quote...</div>';
   document.getElementById("btn-ai").style.display="none";
   document.getElementById("ai-box").style.display="none";
+
   try {
-    const url=`https://corsproxy.io/?https://api.the-odds-api.com/v4/sports/${lega}/odds/?apiKey=${API_KEY}&regions=eu&markets=h2h&oddsFormat=decimal&bookmakers=bet365,unibet,williamhill,pinnacle,betfair`;
-    const r=await fetch(url);
-    if (!r.ok) throw new Error("Errore API: "+r.status);
-    const data=await r.json();
-    const rem=r.headers.get("x-requests-remaining");
-    const used=r.headers.get("x-requests-used");
-    if (rem!==null) document.getElementById("calls-left").innerHTML=`Chiamate rimaste: <span>${rem}</span> / usate: <span>${used}</span>`;
+    const targetUrl = `https://api.the-odds-api.com/v4/sports/${lega}/odds/?apiKey=${API_KEY}&regions=eu&markets=h2h&oddsFormat=decimal&bookmakers=bet365,unibet,williamhill,pinnacle,betfair`;
+    
+    // Prova prima il proxy Netlify (stesso dominio = zero CORS)
+    let r, usedProxy = "netlify";
+    try {
+      r = await fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
+      if (!r.ok) throw new Error("Proxy Netlify fallito: " + r.status);
+    } catch(e1) {
+      // Fallback 1: corsproxy.io
+      usedProxy = "corsproxy";
+      try {
+        r = await fetch(`https://corsproxy.io/?${targetUrl}`);
+        if (!r.ok) throw new Error("corsproxy fallito: " + r.status);
+      } catch(e2) {
+        // Fallback 2: allorigins
+        usedProxy = "allorigins";
+        r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`);
+        if (!r.ok) throw new Error("Tutti i proxy falliti");
+      }
+    }
+
+    const data = await r.json();
+    console.log("Proxy usato:", usedProxy);
+
+    const rem = r.headers.get("x-requests-remaining");
+    const used = r.headers.get("x-requests-used");
+    if (rem !== null) document.getElementById("calls-left").innerHTML=`Chiamate rimaste: <span>${rem}</span> / usate: <span>${used}</span>`;
+
     if (!data.length) { res.innerHTML='<div class="card empty">Nessuna partita disponibile.</div>'; return; }
 
     // Salva storico quote per odds movement
-    const now=Date.now();
+    const now = Date.now();
     data.forEach(match => {
-      const key=match.id;
+      const key = match.id;
       match.bookmakers.forEach(bk => {
         bk.markets.forEach(mkt => {
-          if (mkt.key!=="h2h") return;
+          if (mkt.key !== "h2h") return;
           mkt.outcomes.forEach(o => {
-            const hKey=`${key}_${o.name}`;
-            if (!oddsHistory[hKey]) oddsHistory[hKey]=[];
-            oddsHistory[hKey].push({t:now, q:o.price});
-            if (oddsHistory[hKey].length>10) oddsHistory[hKey].shift();
+            const hKey = `${key}_${o.name}`;
+            if (!oddsHistory[hKey]) oddsHistory[hKey] = [];
+            oddsHistory[hKey].push({t: now, q: o.price});
+            if (oddsHistory[hKey].length > 10) oddsHistory[hKey].shift();
           });
         });
       });
     });
     salvaOddsHistory();
 
-    ultimiDatiPartite=data;
-    document.getElementById("btn-ai").style.display="inline-block";
-    res.innerHTML=data.map(match=>buildMatchCard(match)).join("");
+    ultimiDatiPartite = data;
+    document.getElementById("btn-ai").style.display = "inline-block";
+    res.innerHTML = data.map(match => buildMatchCard(match)).join("");
+
   } catch(e) {
     res.innerHTML=`<div class="card empty" style="color:#fc8181">❌ Errore: ${e.message}</div>`;
   }
@@ -748,7 +757,6 @@ async function analizzaConAI() {
   box.style.display="block";
   risposta.innerHTML='';
 
-  // Costruisce i dati grezzi delle partite da passare a Mistral
   const st=calcStats();
   const datiPartite=ultimiDatiPartite.map(match=>{
     const allOdds={home:[],away:[],draw:[]};
@@ -781,8 +789,8 @@ async function analizzaConAI() {
       `Quote (max tra ${match.bookmakers.length} bookmaker): 1=${maxH.toFixed(2)} X=${maxD?maxD.toFixed(2):"N/D"} 2=${maxA.toFixed(2)}`,
       `Prob. implicita: 1=${probH}% X=${probD?probD+"%":"N/D"} 2=${probA}%`,
       `Edge rispetto alla media: 1=+${edgeH}% 2=+${edgeA}%`,
-      movH&&movH.diff<-0.05?`ATTENZIONE: quota 1 in CALO di ${movH.pct}% (soldi professionisti su casa)`:null,
-      movA&&movA.diff<-0.05?`ATTENZIONE: quota 2 in CALO di ${movA.pct}% (soldi professionisti su ospite)`:null,
+      movH&&movH.diff<-0.05?`ATTENZIONE: quota 1 in CALO di ${movH.pct}%`:null,
+      movA&&movA.diff<-0.05?`ATTENZIONE: quota 2 in CALO di ${movA.pct}%`:null,
     ].filter(Boolean).join("\n");
   }).filter(Boolean).join("\n---\n");
 
@@ -832,7 +840,7 @@ Rispondi in italiano, in modo conciso e diretto. Aggiungi un disclaimer finale.`
   } catch(e){
     let msg=e.message;
     if(msg.includes("Failed to fetch")||msg.includes("ERR_CONNECTION_REFUSED"))
-      msg="Ollama non raggiungibile.\nAssicurati di averlo avviato con:\nset OLLAMA_ORIGINS=* && ollama serve";
+      msg="Ollama non raggiungibile.\nAvvialo con:\nset OLLAMA_ORIGINS=* && ollama serve";
     risposta.textContent="Errore: "+msg;
     risposta.style.color="#fc8181";
   }
@@ -840,109 +848,7 @@ Rispondi in italiano, in modo conciso e diretto. Aggiungi un disclaimer finale.`
   btn.innerHTML="🤖 Analizza con AI";
 }
 
-function calcolaTopScommesse(partite) {
-  const candidati=[];
-  partite.forEach(match=>{
-    const allOdds={home:[],away:[],draw:[]};
-    let numBk=0;
-    match.bookmakers.forEach(bk=>{
-      numBk++;
-      bk.markets.forEach(mkt=>{
-        if (mkt.key!=="h2h") return;
-        mkt.outcomes.forEach(o=>{
-          if (o.name===match.home_team) allOdds.home.push(o.price);
-          else if (o.name===match.away_team) allOdds.away.push(o.price);
-          else allOdds.draw.push(o.price);
-        });
-      });
-    });
-    if (!allOdds.home.length||!allOdds.away.length) return;
-    const avg=arr=>arr.reduce((a,b)=>a+b,0)/arr.length;
-    const avgH=avg(allOdds.home),avgA=avg(allOdds.away);
-    const avgD=allOdds.draw.length?avg(allOdds.draw):null;
-    const maxH=Math.max(...allOdds.home),maxA=Math.max(...allOdds.away);
-    const maxD=allOdds.draw.length?Math.max(...allOdds.draw):null;
-    const probH=1/avgH,probA=1/avgA,probD=avgD?1/avgD:0;
-    const totProb=probH+probA+probD;
-    const pNormH=probH/totProb,pNormA=probA/totProb,pNormD=avgD?probD/totProb:0;
-    const edgeH=maxH>avgH*1.02?(maxH/avgH-1):0;
-    const edgeA=maxA>avgA*1.02?(maxA/avgA-1):0;
-    const edgeD=avgD&&maxD>avgD*1.02?(maxD/avgD-1):0;
-    const varH=Math.max(...allOdds.home)-Math.min(...allOdds.home);
-    const varA=Math.max(...allOdds.away)-Math.min(...allOdds.away);
-    const consensoH=1-(varH/avgH),consensoA=1-(varA/avgA);
-    const scoreH=pNormH*(1+edgeH)*consensoH*(numBk/5);
-    const scoreA=pNormA*(1+edgeA)*consensoA*(numBk/5);
-    const scoreD=avgD?pNormD*(1+edgeD)*(numBk/5):0;
-    const dt=new Date(match.commence_time);
-    [{esito:"1",team:match.home_team,quota:maxH,prob:pNormH,score:scoreH,edge:edgeH},
-     {esito:"X",team:"Pareggio",quota:maxD,prob:pNormD,score:scoreD,edge:edgeD},
-     {esito:"2",team:match.away_team,quota:maxA,prob:pNormA,score:scoreA,edge:edgeA}
-    ].forEach(c=>{
-      if (c.quota&&c.prob>0.1) candidati.push({
-        match:`${match.home_team} vs ${match.away_team}`,
-        data:dt.toLocaleDateString("it-IT")+" "+dt.toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"}),
-        esito:c.esito,team:c.team,quota:c.quota,prob:c.prob,score:c.score,edge:c.edge,numBk,isValue:c.edge>0.03
-      });
-    });
-  });
-  return candidati.sort((a,b)=>b.score-a.score).slice(0,3);
-}
-
-function confidenza(score,prob) {
-  if (score>0.55&&prob>0.55) return {label:"ALTA 🟢",color:"#48bb78"};
-  if (score>0.40&&prob>0.40) return {label:"MEDIA 🟡",color:"#f6ad55"};
-  return {label:"BASSA 🔴",color:"#fc8181"};
-}
-
-function renderAnalisiAI(suggerimenti, testoMistral="") {
-  if (!suggerimenti.length) return "<div style='color:#fc8181'>Nessun suggerimento trovato.</div>";
-  const medaglie=["🥇","🥈","🥉"];
-  const cards=suggerimenti.map((s,i)=>{
-    const conf=confidenza(s.score,s.prob);
-    return `<div style="background:#111827;border-radius:12px;padding:16px;margin-bottom:12px;border-left:4px solid ${conf.color}">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-        <div style="font-weight:800;font-size:16px">${medaglie[i]} ${s.match}</div>
-        <div style="background:#1e2533;border-radius:8px;padding:4px 12px;font-size:12px;color:#a0aec0">${s.data}</div>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-        <div style="background:#1e2533;border-radius:8px;padding:10px 16px;text-align:center;min-width:75px">
-          <div style="font-size:11px;color:#718096;margin-bottom:2px">ESITO</div>
-          <div style="font-size:20px;font-weight:800;color:#63b3ed">${s.esito}</div>
-          <div style="font-size:11px;color:#a0aec0">${s.team}</div>
-        </div>
-        <div style="background:#1e2533;border-radius:8px;padding:10px 16px;text-align:center;min-width:75px">
-          <div style="font-size:11px;color:#718096;margin-bottom:2px">QUOTA</div>
-          <div style="font-size:20px;font-weight:800;color:#f6ad55">${s.quota.toFixed(2)}</div>
-          <div style="font-size:11px;color:#a0aec0">${s.numBk} bk</div>
-        </div>
-        <div style="background:#1e2533;border-radius:8px;padding:10px 16px;text-align:center;min-width:75px">
-          <div style="font-size:11px;color:#718096;margin-bottom:2px">PROB.</div>
-          <div style="font-size:20px;font-weight:800;color:#e2e8f0">${(s.prob*100).toFixed(0)}%</div>
-        </div>
-        <div style="background:#1e2533;border-radius:8px;padding:10px 16px;text-align:center;min-width:75px">
-          <div style="font-size:11px;color:#718096;margin-bottom:2px">CONFIDENZA</div>
-          <div style="font-size:13px;font-weight:800;color:${conf.color};margin-top:6px">${conf.label}</div>
-        </div>
-      </div>
-      ${s.isValue?`<div style="font-size:12px;color:#48bb78;font-weight:700;margin-bottom:8px">🔥 Value bet — edge ${(s.edge*100).toFixed(1)}%</div>`:""}
-      <button class="btn-add-to-tracker" onclick='apriModalAdd(${JSON.stringify({evento:s.match,quota:s.quota,esito:s.esito+" — "+s.team,isValue:s.isValue,prob:s.prob})})'>+ Aggiungi al Tracker</button>
-    </div>`;
-  }).join("");
-  const mistralBox=testoMistral
-    ?`<div style="background:#0d1a2e;border:1px solid #2a4365;border-radius:12px;padding:18px;margin-bottom:16px">
-        <div style="font-weight:700;color:#b794f4;margin-bottom:10px;font-size:14px">🧠 Commento di Mistral AI</div>
-        <div style="font-size:13px;line-height:1.8;color:#e2e8f0;white-space:pre-wrap">${testoMistral}</div>
-      </div>`
-    :`<div style="background:#1e2533;border-radius:8px;padding:10px 14px;font-size:12px;color:#718096;margin-bottom:12px">
-        ⚠️ Mistral non disponibile — avvia con <b>set OLLAMA_ORIGINS=* && ollama serve</b>
-      </div>`;
-  return cards+mistralBox+`<div style="font-size:11px;color:#4a5568;padding:10px;background:#1e2533;border-radius:8px">
-    ⚠️ Disclaimer: suggerimenti basati su analisi matematica. Non garantiscono vincite. Scommetti responsabilmente.
-  </div>`;
-}
-
-// ===== BUILD MATCH CARD CON ODDS MOVEMENT =====
+// ===== BUILD MATCH CARD =====
 function buildMatchCard(match) {
   const dt=new Date(match.commence_time);
   const dataStr=dt.toLocaleDateString("it-IT")+" "+dt.toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"});
@@ -968,24 +874,19 @@ function buildMatchCard(match) {
   const probH=(1/avgH*100),probA=(1/avgA*100),probD=avgD?(1/avgD*100):0;
   const isValH=maxH>avgH*1.04,isValA=maxA>avgA*1.04,isValD=avgD&&maxD>avgD*1.04;
   const edge=(mx,avg)=>mx>0&&avg>0?(((1/avg)-(1/mx))*100).toFixed(1):null;
-
-  // Odds movement
   const movH=getOddsMovement(match.id, match.home_team);
   const movA=getOddsMovement(match.id, match.away_team);
   const drawTeam=Object.keys(oddsHistory).find(k=>k.startsWith(match.id)&&k!==`${match.id}_${match.home_team}`&&k!==`${match.id}_${match.away_team}`);
   const movD=drawTeam?getOddsMovement(match.id, drawTeam.replace(match.id+"_","")):null;
-
   const movHtml=(mov)=>{
     if (!mov) return "";
     if (mov.diff<-0.05) return `<div class="odd-movement" style="color:#f6ad55">📉 ${mov.pct}% (soldi in entrata)</div>`;
     if (mov.diff>0.05) return `<div class="odd-movement" style="color:#718096">📈 +${mov.pct}% (quota in salita)</div>`;
     return "";
   };
-
   const isDropH=movH&&movH.diff<-0.05;
   const isDropA=movA&&movA.diff<-0.05;
   const isDropD=movD&&movD.diff<-0.05;
-
   const oddBox=(label,max,prob,isVal,edgeVal,payload,mov,isDrop)=>`
     <div class="odd-box ${isVal?"value-detected":isDrop?"odds-dropped":""}">
       <div class="odd-label">${label}</div>
@@ -995,7 +896,6 @@ function buildMatchCard(match) {
       ${movHtml(mov)}
       <button class="btn-add-to-tracker" onclick='apriModalAdd(${JSON.stringify(payload)})'>+ Tracker</button>
     </div>`;
-
   return `<div class="match-card">
     <div class="match-title">${match.home_team} vs ${match.away_team}</div>
     <div class="match-meta">📅 ${dataStr} · ${bkNames.length} bookmaker</div>
@@ -1009,14 +909,13 @@ function buildMatchCard(match) {
 
 function apriModalAdd(data) {
   pendingAdd=data;
-  // Calcola Kelly suggerito automaticamente
   const st=calcStats();
   const prob=data.prob||0;
   const quota=data.quota||0;
   let kellySuggerito="";
   if (prob>0&&quota>1) {
     const b=quota-1, q=1-prob;
-    const kelly=Math.max(0,(b*prob-q)/b)*0.5; // 50% Kelly
+    const kelly=Math.max(0,(b*prob-q)/b)*0.5;
     const puntata=kelly*st.bankroll;
     if (puntata>0) kellySuggerito=`(Kelly suggerisce: ${fmt(puntata)}€)`;
   }
