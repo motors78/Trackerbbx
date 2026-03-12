@@ -746,14 +746,16 @@ function getOddsMovement(matchId, teamName) {
   return {diff, pct, first, last};
 }
 
-// ===== ANALISI AI =====
+// ===== ANALISI AI — GROQ via PROXY NETLIFY =====
+const GROQ_MODEL = "llama3-70b-8192";
+
 async function analizzaConAI() {
   if (!ultimiDatiPartite.length) { alert("Prima cerca le partite!"); return; }
   const btn=document.getElementById("btn-ai");
   const box=document.getElementById("ai-box");
   const risposta=document.getElementById("ai-risposta");
   btn.disabled=true;
-  btn.innerHTML='<span class="spinner"></span> Mistral sta analizzando...';
+  btn.innerHTML='<span class="spinner"></span> AI sta analizzando...';
   box.style.display="block";
   risposta.innerHTML='';
 
@@ -810,39 +812,26 @@ Per ogni scommessa selezionata:
 Rispondi in italiano, in modo conciso e diretto. Aggiungi un disclaimer finale.`;
 
   try {
-    const response=await fetch("http://localhost:11434/api/generate",{
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({model:"mistral",prompt:prompt,stream:true})
+    const response = await fetch("/api/proxy?groq=1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 1500
+      })
     });
-    if (!response.ok) throw new Error("Ollama HTTP "+response.status);
-    const reader=response.body.getReader();
-    const decoder=new TextDecoder("utf-8");
-    let buffer="";
-    risposta.style.whiteSpace="pre-wrap";
-    while(true){
-      const {done,value}=await reader.read();
-      if(done) break;
-      buffer+=decoder.decode(value,{stream:true});
-      const lines=buffer.split("\n");
-      buffer=lines.pop();
-      for(const line of lines){
-        if(!line.trim()) continue;
-        try{
-          const json=JSON.parse(line);
-          if(json.response) risposta.textContent+=json.response;
-          if(json.done){
-            const tokSec=json.eval_count&&json.eval_duration?(json.eval_count/(json.eval_duration/1e9)).toFixed(1):null;
-            if(tokSec) risposta.textContent+=`\n\n[${json.eval_count} token @ ${tokSec} tok/s]`;
-          }
-        } catch(_){}
-      }
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error("Groq: " + (err.error?.message || response.status));
     }
-  } catch(e){
-    let msg=e.message;
-    if(msg.includes("Failed to fetch")||msg.includes("ERR_CONNECTION_REFUSED"))
-      msg="Ollama non raggiungibile.\nAvvialo con:\nset OLLAMA_ORIGINS=* && ollama serve";
-    risposta.textContent="Errore: "+msg;
-    risposta.style.color="#fc8181";
+    const data = await response.json();
+    const testo = data.choices?.[0]?.message?.content || "Nessuna risposta ricevuta.";
+    risposta.style.whiteSpace = "pre-wrap";
+    risposta.textContent = testo;
+  } catch(e) {
+    risposta.textContent = "Errore: " + e.message;
+    risposta.style.color = "#fc8181";
   }
   btn.disabled=false;
   btn.innerHTML="🤖 Analizza con AI";
