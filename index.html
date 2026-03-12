@@ -606,11 +606,14 @@ function renderDashboard() {
   const ul = document.getElementById("last-bets");
   const recent = [...scommesse].reverse().slice(0, 6);
   if (!recent.length) { ul.innerHTML = '<div class="empty">Nessuna scommessa ancora.</div>'; return; }
-  ul.innerHTML = recent.map(s => `
+  ul.innerHTML = recent.map(s => {
+    const qNum = s.tipo==="multipla" ? parseFloat(s.quotaTotale) : parseFloat(s.quota);
+    const probD = qNum > 1 && s.tipo !== "multipla" ? `<span style="background:#1a2a3a;color:#63b3ed;font-size:11px;font-weight:700;border-radius:5px;padding:2px 8px;margin-left:6px">📊 ${(1/qNum*100).toFixed(0)}%</span>` : "";
+    return `
     <div class="bet-row">
       <div>
         <div class="bet-name">${s.tipo==="multipla"?"🎯 "+s.nome:s.evento}</div>
-        <div class="bet-meta">${s.data} · Q ${s.tipo==="multipla"?fmt(s.quotaTotale):s.quota} · ${s.puntata}€${s.campionato?" · "+s.campionato:""}</div>
+        <div class="bet-meta">${s.data} · Q ${s.tipo==="multipla"?fmt(s.quotaTotale):s.quota} · ${s.puntata}€${s.campionato?" · "+s.campionato:""}${probD}</div>
       </div>
       <div class="bet-right">
         ${s.tipo==="multipla"?'<span class="badge-multi">MULTIPLA</span>':""}
@@ -618,7 +621,8 @@ function renderDashboard() {
         <span class="profit ${profittoClass(s)}">${profitto(s)}</span>
         <span class="status-badge ${risultatoClass(s.risultato)}">${s.risultato||"—"}</span>
       </div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
 function statCard(label, value, color, sub="") {
@@ -662,10 +666,13 @@ function renderScommesse() {
     const quota=isMulti?fmt(s.quotaTotale):s.quota;
     const nome=isMulti?"🎯 "+s.nome:s.evento;
     const eventiHtml=isMulti&&s.eventi?s.eventi.map(e=>`<span class="multi-event-tag">${e.nome} <b>@${e.quota}</b></span>`).join(""):"";
+    const quotaNum = isMulti ? parseFloat(s.quotaTotale) : parseFloat(s.quota);
+    const probAuto = quotaNum > 1 ? (1/quotaNum*100).toFixed(0) : null;
     return `<div class="bet-list-item">
       <div style="flex:1;min-width:180px">
         <div class="bet-name">${nome}</div>
         <div class="bet-meta">${s.data} · Q ${quota} · ${s.puntata}€${s.categoria?" · "+s.categoria:""}${s.campionato?" · "+s.campionato:""}</div>
+        ${probAuto && !isMulti ? `<div style="margin-top:4px"><span style="background:#1a2a3a;color:#63b3ed;font-size:11px;font-weight:700;border-radius:5px;padding:2px 8px">📊 Prob. implicita: ${probAuto}%</span></div>` : ""}
         ${isMulti?`<div class="multi-events-list">${eventiHtml}</div>`:""}
         ${s.note?`<div style="color:#4a5568;font-size:11px;margin-top:4px">📝 ${s.note}</div>`:""}
       </div>
