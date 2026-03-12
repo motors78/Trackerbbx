@@ -99,6 +99,16 @@
   .calls-left span { color: #f6ad55; font-weight: 700; }
   .spinner { display: inline-block; width: 16px; height: 16px; border: 3px solid #2d3748; border-top-color: #63b3ed; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  /* RISK ALERTS */
+  .risk-alert { border-radius: 10px; padding: 12px 18px; margin-bottom: 10px; display: flex; align-items: flex-start; gap: 12px; font-size: 13px; }
+  .risk-alert.danger { background: #2d1515; border: 1px solid #fc8181; color: #fc8181; }
+  .risk-alert.warning { background: #2d2215; border: 1px solid #f6ad55; color: #f6ad55; }
+  .risk-alert.info { background: #152230; border: 1px solid #63b3ed; color: #63b3ed; }
+  .risk-alert-icon { font-size: 20px; line-height: 1; }
+  .risk-alert-title { font-weight: 800; margin-bottom: 3px; }
+  .risk-alert-sub { font-size: 12px; opacity: 0.85; font-weight: 400; }
+  /* RISK ALERTS */
+
   /* KELLY */
   .kelly-box { background: #0d1a2e; border: 1px solid #2a4365; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
   .kelly-result { font-size: 28px; font-weight: 800; color: #48bb78; margin: 10px 0; }
@@ -132,6 +142,7 @@
 
   <!-- DASHBOARD -->
   <div id="page-dashboard">
+    <div id="risk-alerts"></div>
     <div class="stats-grid" id="stats-grid"></div>
     <div class="card">
       <div class="card-title">Ultime scommesse</div>
@@ -452,10 +463,69 @@ function renderStatistiche() {
   if (!kb.value) kb.value = fmt(st.bankroll);
 }
 
+// ===== RISK ALERTS =====
+const SOGLIA_DRAWDOWN = 0.20;
+const SOGLIA_SERIE_NEG = 3;
+const SOGLIA_ESPOSIZIONE = 0.10;
+
+function calcRiskAlerts(st) {
+  const alerts = [];
+  const drawdown = (BANKROLL_INI - st.bankroll) / BANKROLL_INI;
+  if (drawdown >= SOGLIA_DRAWDOWN) {
+    alerts.push({ tipo:"danger", icon:"🔴", titolo:`Drawdown critico: -${(drawdown*100).toFixed(1)}%`, sub:`Hai perso ${fmt(BANKROLL_INI - st.bankroll)}€ sul bankroll iniziale. Considera di ridurre le puntate.` });
+  } else if (drawdown >= SOGLIA_DRAWDOWN * 0.6) {
+    alerts.push({ tipo:"warning", icon:"🟡", titolo:`Drawdown in crescita: -${(drawdown*100).toFixed(1)}%`, sub:`Ti stai avvicinando alla soglia del 20%. Attenzione alle prossime puntate.` });
+  }
+  const risolte = scommesse.filter(s => s.risultato === "VINTO" || s.risultato === "PERSO");
+  let serieNeg = 0;
+  for (let i = risolte.length - 1; i >= 0; i--) {
+    if (risolte[i].risultato === "PERSO") serieNeg++;
+    else break;
+  }
+  if (serieNeg >= SOGLIA_SERIE_NEG) {
+    alerts.push({ tipo:"danger", icon:"📉", titolo:`Serie negativa: ${serieNeg} sconfitte di fila`, sub:`Stai attraversando un momento difficile. Valuta una pausa o riduci le puntate.` });
+  }
+  if (scommesse.length > 0) {
+    const ultima = scommesse[scommesse.length - 1];
+    const puntata = parseFloat(ultima.puntata) || 0;
+    const percBankroll = puntata / st.bankroll;
+    if (percBankroll > SOGLIA_ESPOSIZIONE && ultima.risultato === "In corso") {
+      alerts.push({ tipo:"warning", icon:"⚠️", titolo:`Puntata alta: ${fmt(percBankroll*100)}% del bankroll`, sub:`La tua ultima puntata (${fmt(puntata)}€) supera il 10% del bankroll attuale.` });
+    }
+  }
+  const ultime10 = scommesse.filter(s => s.risultato === "VINTO" || s.risultato === "PERSO").slice(-10);
+  if (ultime10.length >= 5) {
+    const puntato = ultime10.reduce((a,s) => a + (parseFloat(s.puntata)||0), 0);
+    const vinto = ultime10.filter(s=>s.risultato==="VINTO").reduce((a,s) => { const q=s.tipo==="multipla"?parseFloat(s.quotaTotale):parseFloat(s.quota); return a+(q-1)*(parseFloat(s.puntata)||0); }, 0);
+    const perso = ultime10.filter(s=>s.risultato==="PERSO").reduce((a,s) => a+(parseFloat(s.puntata)||0), 0);
+    const roiRecente = puntato > 0 ? ((vinto-perso)/puntato*100) : 0;
+    if (roiRecente < -15) {
+      alerts.push({ tipo:"info", icon:"📊", titolo:`ROI recente negativo: ${roiRecente.toFixed(1)}%`, sub:`Nelle ultime ${ultime10.length} scommesse il tuo ROI è ${roiRecente.toFixed(1)}%. Analizza la tua strategia.` });
+    }
+  }
+  return alerts;
+}
+
+function renderRiskAlerts(st) {
+  const alerts = calcRiskAlerts(st);
+  const el = document.getElementById("risk-alerts");
+  if (!alerts.length) { el.innerHTML = ""; return; }
+  el.innerHTML = alerts.map(a => `
+    <div class="risk-alert ${a.tipo}">
+      <div class="risk-alert-icon">${a.icon}</div>
+      <div class="risk-alert-text">
+        <div class="risk-alert-title">${a.titolo}</div>
+        <div class="risk-alert-sub">${a.sub}</div>
+      </div>
+    </div>
+  `).join("");
+}
+
 // ===== RENDER DASHBOARD =====
 function renderDashboard() {
   const st = calcStats();
   document.getElementById("bankroll-sub").textContent = `Bankroll: ${fmt(st.bankroll)}€`;
+  renderRiskAlerts(st);
   document.getElementById("stats-grid").innerHTML = `
     ${statCard("Bankroll Attuale", fmt(st.bankroll)+"€", st.bankroll>=BANKROLL_INI?"#48bb78":"#fc8181", "Iniziale: "+BANKROLL_INI+"€")}
     ${statCard("Utile Netto", (st.utile>=0?"+":"")+fmt(st.utile)+"€", st.utile>=0?"#48bb78":"#fc8181")}
