@@ -305,6 +305,33 @@
       <div class="card-title">🌍 ROI per campionato</div>
       <div id="roi-campionato"></div>
     </div>
+
+    <!-- CLV TRACKER -->
+    <div class="card">
+      <div class="card-title">📈 CLV Tracker — Closing Line Value</div>
+      <div style="font-size:12px;color:#718096;margin-bottom:14px;line-height:1.6">
+        Il CLV misura se stai prendendo quote migliori di quelle finali prima del match. Se la tua quota è più alta della closing line → hai vantaggio strutturale. Inserisci la quota closing dopo che la partita è iniziata.
+      </div>
+      <div id="clv-list"></div>
+      <div style="margin-top:12px;padding:10px 14px;background:#0f1117;border-radius:8px;font-size:12px;color:#718096">
+        💡 Come usarlo: quando inserisci una scommessa segna la quota. Prima del fischio d'inizio, controlla la quota attuale sul bookmaker e aggiornala qui come "Closing Line".
+      </div>
+    </div>
+
+    <!-- SIMULATORE KELLY -->
+    <div class="card">
+      <div class="card-title">🚀 Simulatore crescita bankroll</div>
+      <div style="font-size:12px;color:#718096;margin-bottom:14px;line-height:1.6">
+        Simula come crescerà il tuo bankroll se mantieni il tuo ROI attuale per N scommesse. Usa questo per capire perché la disciplina e il Kelly sono fondamentali nel lungo periodo.
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:14px">
+        <div class="form-group"><label>Bankroll iniziale €</label><input type="number" id="sim-bankroll" placeholder="Es: 10" step="1" oninput="aggiornaSim()"></div>
+        <div class="form-group"><label>ROI medio % per bet</label><input type="number" id="sim-roi" placeholder="Es: 5" step="0.5" oninput="aggiornaSim()"></div>
+        <div class="form-group"><label>Puntata media % bankroll</label><input type="number" id="sim-stake" placeholder="Es: 3" step="0.5" oninput="aggiornaSim()"></div>
+        <div class="form-group"><label>Numero scommesse</label><input type="number" id="sim-n" placeholder="Es: 200" step="10" oninput="aggiornaSim()"></div>
+      </div>
+      <div id="sim-result"></div>
+    </div>
   </div>
 
   <!-- ANALISI -->
@@ -620,6 +647,7 @@ function renderCalibrazione() {
 
 function renderStatistiche() {
   renderCalibrazione();
+  renderCLV();
   const catGruppi = calcRoiPerGruppo("categoria");
   const catEl = document.getElementById("roi-categoria");
   if (!Object.keys(catGruppi).length) { catEl.innerHTML = '<div class="empty">Nessun dato disponibile ancora.</div>'; }
@@ -651,6 +679,16 @@ function renderStatistiche() {
   const st = calcStats();
   const kb = document.getElementById("k-bankroll");
   if (!kb.value) kb.value = fmt(st.bankroll);
+  // Pre-popola simulatore con dati reali
+  const simBK=document.getElementById("sim-bankroll");
+  const simROI=document.getElementById("sim-roi");
+  const simStake=document.getElementById("sim-stake");
+  const simN=document.getElementById("sim-n");
+  if(!simBK.value) simBK.value=fmt(st.bankroll);
+  if(!simROI.value) simROI.value=st.roi.toFixed(1);
+  if(!simStake.value) simStake.value="3";
+  if(!simN.value) simN.value="200";
+  aggiornaSim();
 }
 
 // ===== GRAFICO BANKROLL =====
@@ -1048,7 +1086,7 @@ async function fetchOdds() {
   document.getElementById("btn-ai").style.display="none";
   document.getElementById("ai-box").style.display="none";
   try {
-    const targetUrl = `https://api.the-odds-api.com/v4/sports/${lega}/odds/?apiKey=${API_KEY}&regions=eu&markets=h2h&oddsFormat=decimal&bookmakers=bet365,unibet,williamhill,pinnacle,betfair`;
+    const targetUrl = `https://api.the-odds-api.com/v4/sports/${lega}/odds/?apiKey=${API_KEY}&regions=eu&markets=h2h,totals,btts&oddsFormat=decimal&bookmakers=bet365,unibet,williamhill,pinnacle,betfair`;
     const WORKER_URL = "https://tracker-proxy.becchinigiuseppe.workers.dev";
     let r;
     try {
@@ -1389,47 +1427,69 @@ function buildMatchCard(match) {
   const dt=new Date(match.commence_time);
   const dataStr=dt.toLocaleDateString("it-IT")+" "+dt.toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"});
   const allOdds={home:[],away:[],draw:[]};
+  const allOver25=[],allUnder25=[],allBTTS=[],allNoBTTS=[];
   const bkNames=[];
   match.bookmakers.forEach(bk=>{
     bkNames.push(bk.title);
     bk.markets.forEach(mkt=>{
-      if (mkt.key!=="h2h") return;
-      mkt.outcomes.forEach(o=>{
-        if (o.name===match.home_team) allOdds.home.push(o.price);
-        else if (o.name===match.away_team) allOdds.away.push(o.price);
-        else allOdds.draw.push(o.price);
-      });
+      if(mkt.key==="h2h"){mkt.outcomes.forEach(o=>{if(o.name===match.home_team)allOdds.home.push(o.price);else if(o.name===match.away_team)allOdds.away.push(o.price);else allOdds.draw.push(o.price);});}
+      if(mkt.key==="totals"){mkt.outcomes.forEach(o=>{if(o.name==="Over"&&o.point===2.5)allOver25.push(o.price);if(o.name==="Under"&&o.point===2.5)allUnder25.push(o.price);});}
+      if(mkt.key==="btts"){mkt.outcomes.forEach(o=>{if(o.name==="Yes")allBTTS.push(o.price);if(o.name==="No")allNoBTTS.push(o.price);});}
     });
   });
-  if (!allOdds.home.length) return "";
+  if(!allOdds.home.length)return"";
+  const avg=arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:null;
+  const maxArr=arr=>arr.length?Math.max(...arr):null;
   const maxH=Math.max(...allOdds.home),maxA=Math.max(...allOdds.away);
   const maxD=allOdds.draw.length?Math.max(...allOdds.draw):null;
-  const avgH=allOdds.home.reduce((a,b)=>a+b,0)/allOdds.home.length;
-  const avgA=allOdds.away.reduce((a,b)=>a+b,0)/allOdds.away.length;
-  const avgD=allOdds.draw.length?allOdds.draw.reduce((a,b)=>a+b,0)/allOdds.draw.length:null;
+  const avgH=avg(allOdds.home),avgA=avg(allOdds.away),avgD=avg(allOdds.draw);
   const probH=(1/avgH*100),probA=(1/avgA*100),probD=avgD?(1/avgD*100):0;
   const isValH=maxH>avgH*1.04,isValA=maxA>avgA*1.04,isValD=avgD&&maxD>avgD*1.04;
-  const edge=(mx,avg)=>mx>0&&avg>0?(((1/avg)-(1/mx))*100).toFixed(1):null;
-  const movH=getOddsMovement(match.id,match.home_team);
-  const movA=getOddsMovement(match.id,match.away_team);
-  const isDropH=movH&&movH.diff<-0.05;
-  const isDropA=movA&&movA.diff<-0.05;
-  const movHtml=(mov)=>{
-    if (!mov) return "";
-    if (mov.diff<-0.05) return `<div class="odd-movement" style="color:#f6ad55">📉 ${mov.pct}% (soldi in entrata)</div>`;
-    if (mov.diff>0.05) return `<div class="odd-movement" style="color:#718096">📈 +${mov.pct}%</div>`;
-    return "";
-  };
-  const oddBox=(label,max,prob,isVal,edgeVal,payload,mov,isDrop,teamName)=>`
+  const edge=(mx,av)=>mx>0&&av>0?(((1/av)-(1/mx))*100).toFixed(1):null;
+  const movH=getOddsMovement(match.id,match.home_team),movA=getOddsMovement(match.id,match.away_team);
+  const isDropH=movH&&movH.diff<-0.05,isDropA=movA&&movA.diff<-0.05;
+  const movHtml=mov=>{if(!mov)return"";if(mov.diff<-0.05)return`<div class="odd-movement" style="color:#f6ad55">📉 ${mov.pct}% (smart money)</div>`;if(mov.diff>0.05)return`<div class="odd-movement" style="color:#718096">📈 +${mov.pct}%</div>`;return"";};
+  const oddBox=(label,mx,prob,isVal,edgeVal,payload,mov,isDrop,teamName)=>`
     <div class="odd-box ${isVal?"value-detected":isDrop?"odds-dropped":""}">
       <div class="odd-label">${label}</div>
-      <div class="odd-quota" style="color:${isVal?"#48bb78":isDrop?"#f6ad55":"#e2e8f0"}">${fmt(max)}</div>
+      <div class="odd-quota" style="color:${isVal?"#48bb78":isDrop?"#f6ad55":"#e2e8f0"}">${fmt(mx)}</div>
       <div class="odd-prob">Prob: ${pct(prob)}</div>
-      ${isVal?`<div class="odd-value">🔥 +${edgeVal}% edge</div>`:isDrop?`<div class="odd-movement" style="color:#f6ad55">📉 Quota in calo</div>`:`<div class="odd-novalue">—</div>`}
+      ${isVal?`<div class="odd-value">🔥 +${edgeVal}% edge</div>`:isDrop?`<div class="odd-movement" style="color:#f6ad55">📉 In calo</div>`:`<div class="odd-novalue">—</div>`}
       ${movHtml(mov)}
-      ${miniChartQuota(match.id, teamName)}
+      ${miniChartQuota(match.id,teamName)}
       <button class="btn-add-to-tracker" onclick='apriModalAdd(${JSON.stringify(payload)})'>+ Tracker</button>
     </div>`;
+  // Over/Under e BTTS
+  const avgO25=avg(allOver25),avgU25=avg(allUnder25),avgB=avg(allBTTS),avgNB=avg(allNoBTTS);
+  const maxO25=maxArr(allOver25),maxU25=maxArr(allUnder25),maxB=maxArr(allBTTS),maxNB=maxArr(allNoBTTS);
+  const probO25=avgO25?(1/avgO25*100).toFixed(1):null,probU25=avgU25?(1/avgU25*100).toFixed(1):null;
+  const probB=avgB?(1/avgB*100).toFixed(1):null,probNB=avgNB?(1/avgNB*100).toFixed(1):null;
+  const isValO=avgO25&&maxO25&&maxO25>avgO25*1.04,isValU=avgU25&&maxU25&&maxU25>avgU25*1.04;
+  const isValB=avgB&&maxB&&maxB>avgB*1.04,isValNB=avgNB&&maxNB&&maxNB>avgNB*1.04;
+  const mercatiExtra=(avgO25||avgB)?`
+    <div style="margin-top:10px;border-top:1px solid #2d3748;padding-top:10px">
+      <div style="font-size:10px;color:#718096;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Mercati alternativi</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${avgO25?`<div style="background:#0f1117;border-radius:8px;padding:8px 12px;flex:1;min-width:140px;border:1px solid ${isValO||isValU?"#48bb78":"#2d3748"}">
+          <div style="font-size:10px;color:#718096;margin-bottom:5px">⚽ OVER / UNDER 2.5</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="text-align:center"><div style="font-size:15px;font-weight:800;color:${isValO?"#48bb78":"#e2e8f0"}">${maxO25?fmt(maxO25):"—"}</div><div style="font-size:10px;color:#718096">Over ${probO25?probO25+"%":""}</div>${isValO?`<div style="font-size:10px;color:#48bb78;font-weight:700">🔥 Value</div>`:""}</div>
+            <div style="color:#4a5568;font-size:12px">/</div>
+            <div style="text-align:center"><div style="font-size:15px;font-weight:800;color:${isValU?"#48bb78":"#e2e8f0"}">${maxU25?fmt(maxU25):"—"}</div><div style="font-size:10px;color:#718096">Under ${probU25?probU25+"%":""}</div>${isValU?`<div style="font-size:10px;color:#48bb78;font-weight:700">🔥 Value</div>`:""}</div>
+          </div>
+          <button class="btn-add-to-tracker" style="width:100%;margin-top:6px" onclick='apriModalAdd(${JSON.stringify({evento:match.home_team+" vs "+match.away_team,quota:maxO25||1,esito:"Over 2.5",isValue:isValO,prob:avgO25?1/avgO25:0.5})})'>+ Over 2.5</button>
+        </div>`:""}
+        ${avgB?`<div style="background:#0f1117;border-radius:8px;padding:8px 12px;flex:1;min-width:140px;border:1px solid ${isValB||isValNB?"#48bb78":"#2d3748"}">
+          <div style="font-size:10px;color:#718096;margin-bottom:5px">🥅 BTTS (Goal/Goal)</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="text-align:center"><div style="font-size:15px;font-weight:800;color:${isValB?"#48bb78":"#e2e8f0"}">${maxB?fmt(maxB):"—"}</div><div style="font-size:10px;color:#718096">GG ${probB?probB+"%":""}</div>${isValB?`<div style="font-size:10px;color:#48bb78;font-weight:700">🔥 Value</div>`:""}</div>
+            <div style="color:#4a5568;font-size:12px">/</div>
+            <div style="text-align:center"><div style="font-size:15px;font-weight:800;color:${isValNB?"#48bb78":"#e2e8f0"}">${maxNB?fmt(maxNB):"—"}</div><div style="font-size:10px;color:#718096">NG ${probNB?probNB+"%":""}</div>${isValNB?`<div style="font-size:10px;color:#48bb78;font-weight:700">🔥 Value</div>`:""}</div>
+          </div>
+          <button class="btn-add-to-tracker" style="width:100%;margin-top:6px" onclick='apriModalAdd(${JSON.stringify({evento:match.home_team+" vs "+match.away_team,quota:maxB||1,esito:"Goal/Goal",isValue:isValB,prob:avgB?1/avgB:0.5})})'>+ Goal/Goal</button>
+        </div>`:""}
+      </div>
+    </div>`:"";
   return `<div class="match-card">
     <div class="match-title">${match.home_team} vs ${match.away_team}</div>
     <div class="match-meta">📅 ${dataStr} · ${bkNames.length} bookmaker</div>
@@ -1438,9 +1498,9 @@ function buildMatchCard(match) {
       ${maxD!==null?oddBox("X — Pareggio",maxD,probD,isValD,edge(maxD,avgD),{evento:match.home_team+" vs "+match.away_team,quota:maxD,esito:"X — Pareggio",isValue:isValD,prob:probD/100},null,false,"Draw"):""}
       ${oddBox("2 — "+match.away_team.split(" ").pop(),maxA,probA,isValA,edge(maxA,avgA),{evento:match.home_team+" vs "+match.away_team,quota:maxA,esito:"2 — "+match.away_team,isValue:isValA,prob:probA/100},movA,isDropA,match.away_team)}
     </div>
+    ${mercatiExtra}
   </div>`;
 }
-
 function apriModalAdd(data) {
   pendingAdd=data;
   const st=calcStats();
@@ -1804,6 +1864,174 @@ function renderLabH2H(hT,aT,matches){
   }).join("");
   const mg=matches.length?(tG/matches.length).toFixed(1):"N/D";
   return`<div class="lab-card"><div style="font-weight:700;font-size:15px;color:#b794f4;margin-bottom:4px">📋 Head to Head</div><div style="font-size:12px;color:#718096;margin-bottom:14px">Ultimi ${matches.length} precedenti</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">${[["Vittorie",w,"#48bb78"],["Pareggi",d,"#f6ad55"],["Sconfitte",l,"#fc8181"],["Media gol",mg,"#63b3ed"]].map(([lb,v,c])=>`<div style="background:#0a1520;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#718096;margin-bottom:4px">${lb}</div><div style="font-size:20px;font-weight:800;color:${c}">${v}</div></div>`).join("")}</div>${righe}</div>`;
+}
+
+// ===== CLV TRACKER =====
+const CLV_KEY = "clv_tracker_v1";
+let clvData = JSON.parse(localStorage.getItem(CLV_KEY) || "[]");
+function salvaClv(){localStorage.setItem(CLV_KEY,JSON.stringify(clvData));}
+
+function renderCLV(){
+  const el=document.getElementById("clv-list");
+  if(!el)return;
+  // Sincronizza con scommesse In corso
+  const inCorso=scommesse.filter(s=>s.risultato==="In corso"&&s.tipo==="singola");
+  inCorso.forEach(s=>{
+    const key=s.evento+"_"+s.data;
+    if(!clvData.find(c=>c.key===key)){
+      clvData.push({key,evento:s.evento,quotaPresa:parseFloat(s.quota),quotaClosing:null,data:s.data});
+      salvaClv();
+    }
+  });
+  if(!clvData.length){el.innerHTML='<div class="empty">Nessuna scommessa In corso. Il CLV si popolerà automaticamente.</div>';return;}
+  
+  let totCLV=0,conClosing=0;
+  el.innerHTML=clvData.map((c,i)=>{
+    const clv=c.quotaClosing?(((c.quotaPresa-c.quotaClosing)/c.quotaClosing)*100).toFixed(1):null;
+    if(clv!==null){totCLV+=parseFloat(clv);conClosing++;}
+    const clvColor=clv===null?"#718096":parseFloat(clv)>0?"#48bb78":"#fc8181";
+    return `<div style="background:#0f1117;border-radius:8px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-weight:600;font-size:13px">${c.evento}</div>
+          <div style="font-size:11px;color:#4a5568;margin-top:2px">${c.data}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="text-align:center">
+            <div style="font-size:10px;color:#718096">Quota presa</div>
+            <div style="font-size:16px;font-weight:800;color:#63b3ed">${c.quotaPresa.toFixed(2)}</div>
+          </div>
+          <div style="color:#4a5568">→</div>
+          <div style="text-align:center">
+            <div style="font-size:10px;color:#718096">Closing line</div>
+            <input type="number" step="0.01" placeholder="Es: 2.10" value="${c.quotaClosing||""}"
+              style="width:80px;background:#1e2533;border:1px solid #2d3748;border-radius:6px;padding:4px 8px;color:#e2e8f0;font-size:14px;font-weight:700;text-align:center;outline:none"
+              onchange="aggiornaClosing(${i},this.value)">
+          </div>
+          ${clv!==null?`
+          <div style="text-align:center">
+            <div style="font-size:10px;color:#718096">CLV</div>
+            <div style="font-size:16px;font-weight:800;color:${clvColor}">${parseFloat(clv)>0?"+":""}${clv}%</div>
+          </div>`:""}
+          <button onclick="rimuoviClv(${i})" style="background:#2d3748;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;color:#fc8181;font-size:12px">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+
+  if(conClosing>0){
+    const avgCLV=(totCLV/conClosing).toFixed(1);
+    const col=parseFloat(avgCLV)>0?"#48bb78":"#fc8181";
+    el.innerHTML+=`<div style="background:#0d1a2e;border:1px solid #2a4365;border-radius:8px;padding:12px;margin-top:8px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px;color:#718096">CLV medio su ${conClosing} scommesse</span>
+      <span style="font-size:20px;font-weight:800;color:${col}">${parseFloat(avgCLV)>0?"+":""}${avgCLV}%</span>
+    </div>`;
+  }
+}
+
+function aggiornaClosing(i,val){
+  clvData[i].quotaClosing=parseFloat(val)||null;
+  salvaClv();renderCLV();
+}
+function rimuoviClv(i){clvData.splice(i,1);salvaClv();renderCLV();}
+
+// ===== SIMULATORE KELLY =====
+function aggiornaSim(){
+  const bk=parseFloat(document.getElementById("sim-bankroll").value);
+  const roi=parseFloat(document.getElementById("sim-roi").value)/100;
+  const stake=parseFloat(document.getElementById("sim-stake").value)/100;
+  const n=parseInt(document.getElementById("sim-n").value);
+  const el=document.getElementById("sim-result");
+  if([bk,roi,stake,n].some(isNaN)||bk<=0||n<=0){el.innerHTML="";return;}
+
+  // Simula N scommesse con ROI medio e puntata % bankroll
+  // Win rate stimato dal ROI: assumiamo quota media 2.0
+  // ROI = (wr*1 - (1-wr)*1) = 2*wr - 1 → wr = (ROI+1)/2
+  const quotaMedia=2.0;
+  const wr=(roi*(quotaMedia-1)+1)/(quotaMedia);
+  
+  // Simulazione Monte Carlo: 3 scenari (pessimista, medio, ottimista)
+  const simula=(varianza)=>{
+    let b=bk;const punti=[bk];
+    for(let i=0;i<n;i++){
+      const puntata=b*stake;
+      const rand=Math.random();
+      const wrAjusted=Math.max(0.01,Math.min(0.99,wr+(Math.random()-0.5)*varianza));
+      if(rand<wrAjusted)b+=puntata*(quotaMedia-1);
+      else b-=puntata;
+      punti.push(Math.max(0,b));
+    }
+    return punti;
+  };
+
+  // Usa seed fisso per riproducibilità (avg scenario)
+  const simulaAvg=()=>{
+    let b=bk;const punti=[bk];
+    for(let i=0;i<n;i++){
+      const puntata=b*stake;
+      if(Math.random()<wr)b+=puntata*(quotaMedia-1);else b-=puntata;
+      punti.push(Math.max(0,b));
+    }
+    return punti;
+  };
+
+  const avg=simulaAvg();
+  const finaleBK=avg[avg.length-1];
+  const profitto=finaleBK-bk;
+  const color=finaleBK>=bk?"#48bb78":"#fc8181";
+
+  // Grafico SVG semplice
+  const W=700,H=180,padL=50,padR=20,padT=16,padB=32;
+  const iW=W-padL-padR,iH=H-padT-padB;
+  const minV=Math.min(...avg),maxV=Math.max(...avg);
+  const rangeV=maxV-minV||1;
+  const toX=i=>padL+(i/(avg.length-1))*iW;
+  const toY=v=>padT+iH-((v-minV)/rangeV)*iH;
+  const pathD=avg.map((v,i)=>`${i===0?"M":"L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+  const areaD=`${pathD} L${toX(avg.length-1).toFixed(1)},${(padT+iH).toFixed(1)} L${padL},${(padT+iH).toFixed(1)} Z`;
+  const yIni=toY(bk);
+
+  // Step asse X
+  const xLabels=[0,Math.round(n/4),Math.round(n/2),Math.round(n*3/4),n].map(i=>{
+    const idx=Math.min(i,avg.length-1);
+    return`<text x="${toX(idx).toFixed(1)}" y="${(padT+iH+18).toFixed(1)}" fill="#4a5568" font-size="10" text-anchor="middle">${i}</text>`;
+  }).join("");
+
+  el.innerHTML=`
+    <div style="background:#0f1117;border-radius:10px;padding:14px;margin-bottom:12px">
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
+        <defs><linearGradient id="simGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
+        </linearGradient></defs>
+        <path d="${areaD}" fill="url(#simGrad)"/>
+        <line x1="${padL}" y1="${yIni.toFixed(1)}" x2="${(padL+iW).toFixed(1)}" y2="${yIni.toFixed(1)}" stroke="#4a5568" stroke-width="1" stroke-dasharray="4,4"/>
+        <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
+        <text x="${padL-6}" y="${toY(maxV).toFixed(1)}" fill="#718096" font-size="9" text-anchor="end" dominant-baseline="middle">${maxV.toFixed(0)}€</text>
+        <text x="${padL-6}" y="${toY(minV).toFixed(1)}" fill="#718096" font-size="9" text-anchor="end" dominant-baseline="middle">${minV.toFixed(0)}€</text>
+        <text x="${padL-6}" y="${yIni.toFixed(1)}" fill="#4a5568" font-size="9" text-anchor="end" dominant-baseline="middle">${bk}€</text>
+        ${xLabels}
+      </svg>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px">
+      <div style="background:#0f1117;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#718096;margin-bottom:4px">Bankroll finale</div>
+        <div style="font-size:18px;font-weight:800;color:${color}">${finaleBK.toFixed(2)}€</div>
+      </div>
+      <div style="background:#0f1117;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#718096;margin-bottom:4px">Profitto simulato</div>
+        <div style="font-size:18px;font-weight:800;color:${color}">${profitto>=0?"+":""}${profitto.toFixed(2)}€</div>
+      </div>
+      <div style="background:#0f1117;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#718096;margin-bottom:4px">ROI totale</div>
+        <div style="font-size:18px;font-weight:800;color:${color}">${((profitto/bk)*100).toFixed(1)}%</div>
+      </div>
+      <div style="background:#0f1117;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#718096;margin-bottom:4px">Win rate stimato</div>
+        <div style="font-size:18px;font-weight:800;color:#63b3ed">${(wr*100).toFixed(1)}%</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:#4a5568;margin-top:8px">⚠️ Simulazione Monte Carlo con quota media ${quotaMedia} e ${n} scommesse. Ogni click ri-simula con varianza casuale. I risultati reali dipendono dalla disciplina e dalla qualità delle scommesse.</div>`;
 }
 
 renderAll();
