@@ -1219,8 +1219,13 @@ Rispondi SOLO con il JSON, nessun testo prima o dopo.`;
     }
 
     if (picks && Array.isArray(picks)) {
-      risposta.innerHTML = renderAIPicks(picks, st.bankroll);
-    } else {
+risposta.innerHTML = renderAIPicks(picks, st.bankroll);
+// Invia alert Telegram per ogni pick con confidenza ALTA o MEDIA
+picks.forEach(pick => {
+  if (pick.confidenza === "ALTA" || pick.confidenza === "MEDIA") {
+    inviaAlertTelegram(pick);
+  }
+});    } else {
       // fallback: mostra testo grezzo
       risposta.style.whiteSpace = "pre-wrap";
       risposta.textContent = testo;
@@ -1619,7 +1624,34 @@ function renderProScoreCard(match,score,statsHome,statsAway,avgH,avgA,avgD){
   </div>`;
 }
 
+// ===== TELEGRAM ALERT =====
+async function inviaAlertTelegram(pick) {
+  try {
+    await fetch("https://tracker-proxy.becchinigiuseppe.workers.dev/api/telegram/alert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        homeTeam:    pick.partita.split(" vs ")[0] || pick.partita,
+        awayTeam:    pick.partita.split(" vs ")[1] || "",
+        league:      document.getElementById("lega-select")?.options[document.getElementById("lega-select")?.selectedIndex]?.text || "—",
+        market:      pick.descrizione_esito || pick.esito,
+        poissonProb: (pick.prob_stimata || 0) / 100,
+        bookOdds:    pick.quota_consigliata || 0,
+        edge:        (pick.edge || 0) / 100,
+        kellyStake:  (pick.kelly_puntata || 0) / calcStats().bankroll,
+        matchTime:   new Date().toLocaleDateString("it-IT"),
+      }),
+    });
+  } catch(e) {
+    console.error("[Telegram] Errore invio alert:", e);
+  }
+}
+
+
+
+
 renderAll();
 </script>
 </body>
 </html>
+
