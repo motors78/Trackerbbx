@@ -1222,10 +1222,10 @@ Rispondi SOLO con il JSON, nessun testo prima o dopo.`;
 risposta.innerHTML = renderAIPicks(picks, st.bankroll);
 // Invia alert Telegram per ogni pick con confidenza ALTA o MEDIA
 picks.forEach(pick => {
-  if (pick.confidenza === "ALTA" || pick.confidenza === "MEDIA") {
+  if ((pick.confidenza === "ALTA" || pick.confidenza === "MEDIA") && pick.edge >= 5) {
     inviaAlertTelegram(pick);
   }
-});    } else {
+});   } else {
       // fallback: mostra testo grezzo
       risposta.style.whiteSpace = "pre-wrap";
       risposta.textContent = testo;
@@ -1625,7 +1625,15 @@ function renderProScoreCard(match,score,statsHome,statsAway,avgH,avgA,avgD){
 }
 
 // ===== TELEGRAM ALERT =====
+const alertInviati = new Set();
+
 async function inviaAlertTelegram(pick) {
+  const chiave = `${pick.partita}_${pick.esito}_${new Date().toLocaleDateString("it-IT")}`;
+  if (alertInviati.has(chiave)) {
+    console.log("[Telegram] Alert già inviato, skip:", chiave);
+    return;
+  }
+  alertInviati.add(chiave);
   try {
     await fetch("https://tracker-proxy.becchinigiuseppe.workers.dev/api/telegram/alert", {
       method: "POST",
@@ -1642,15 +1650,16 @@ async function inviaAlertTelegram(pick) {
         matchTime:   new Date().toLocaleDateString("it-IT"),
       }),
     });
+    console.log("[Telegram] Alert inviato:", pick.partita);
   } catch(e) {
-    console.error("[Telegram] Errore invio alert:", e);
+    console.error("[Telegram] Errore:", e);
   }
 }
-
-
-
-
 renderAll();
+
+
+
+
 </script>
 </body>
 </html>
