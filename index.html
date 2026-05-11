@@ -1,4 +1,288 @@
+<!DOCTYPE html>
+<html lang="it">
+<head> 
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tracker Scommesse Serie B X</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#63b3ed">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tracker">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f1117; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
+  header { background: #161b27; border-bottom: 1px solid #1e2533; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .logo { font-size: 20px; font-weight: 800; }
+  .logo span { color: #63b3ed; }
+  .sub { color: #4a5568; font-size: 12px; margin-top: 2px; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tab-btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; font-size: 13px; transition: .2s; }
+  .tab-btn.active { background: #63b3ed; color: #0f1117; }
+  .tab-btn:not(.active) { background: #1e2533; color: #a0aec0; }
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+  .stats-grid { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 24px; }
+  .stat-card { background: #1e2533; border-radius: 12px; padding: 18px 22px; flex: 1 1 140px; min-width: 130px; }
+  .stat-label { color: #718096; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .stat-value { font-size: 26px; font-weight: 700; }
+  .stat-sub { color: #4a5568; font-size: 11px; margin-top: 4px; }
+  .card { background: #1e2533; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .card-title { font-weight: 700; font-size: 13px; color: #a0aec0; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+  .bet-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #2d3748; flex-wrap: wrap; gap: 8px; }
+  .bet-row:last-child { border-bottom: none; }
+  .bet-name { font-weight: 600; font-size: 14px; }
+  .bet-meta { color: #718096; font-size: 12px; margin-top: 2px; }
+  .bet-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .badge { font-size: 11px; background: #2d3748; color: #f6ad55; border-radius: 6px; padding: 3px 10px; }
+  .badge-multi { font-size: 11px; background: #2d3748; color: #b794f4; border-radius: 6px; padding: 3px 10px; }
+  .status-badge { font-size: 12px; font-weight: 600; background: #0f1117; border-radius: 6px; padding: 3px 10px; }
+  .profit { font-weight: 700; font-size: 15px; min-width: 60px; text-align: right; }
+  .green { color: #48bb78; } .red { color: #fc8181; } .gray { color: #a0aec0; } .blue { color: #63b3ed; }
+  .row-actions button { background: #2d3748; border: none; border-radius: 6px; padding: 6px 11px; cursor: pointer; font-size: 13px; }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+  .top-bar h2 { font-weight: 700; font-size: 16px; }
+  .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-add { background: #63b3ed; color: #0f1117; border: none; border-radius: 8px; padding: 9px 18px; font-weight: 700; font-size: 13px; cursor: pointer; }
+  .btn-add-multi { background: #b794f4; color: #0f1117; border: none; border-radius: 8px; padding: 9px 18px; font-weight: 700; font-size: 13px; cursor: pointer; }
+  .form-box { background: #1e2533; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  .form-title { font-weight: 700; margin-bottom: 16px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { color: #718096; font-size: 12px; }
+  .form-group input, .form-group select { background: #0f1117; border: 1px solid #2d3748; border-radius: 8px; padding: 8px 10px; color: #e2e8f0; font-size: 14px; outline: none; }
+  .form-group input:focus, .form-group select:focus { border-color: #63b3ed; }
+  .form-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .btn-save { background: #48bb78; color: #0f1117; border: none; border-radius: 8px; padding: 10px 24px; font-weight: 700; cursor: pointer; }
+  .btn-cancel { background: #2d3748; color: #a0aec0; border: none; border-radius: 8px; padding: 10px 18px; cursor: pointer; }
+  .multi-section { margin-top: 16px; border-top: 1px solid #2d3748; padding-top: 16px; }
+  .multi-section-title { font-size: 13px; color: #b794f4; font-weight: 700; margin-bottom: 12px; }
+  .multi-event-row { display: grid; grid-template-columns: 1fr 100px auto; gap: 8px; align-items: end; margin-bottom: 8px; }
+  .btn-rm { background: #2d3748; color: #fc8181; border: none; border-radius: 6px; padding: 8px 10px; cursor: pointer; font-size: 14px; height: 36px; }
+  .btn-add-event { background: #2d3748; color: #b794f4; border: none; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; margin-top: 4px; }
+  .quota-totale { background: #0f1117; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #b794f4; margin-top: 10px; font-weight: 600; }
+  .bet-list-item { background: #1e2533; border-radius: 12px; padding: 14px 18px; display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+  .multi-events-list { margin-top: 6px; }
+  .multi-event-tag { display: inline-block; background: #0f1117; color: #b794f4; border-radius: 6px; padding: 2px 8px; font-size: 11px; margin: 2px 2px 0 0; }
+  .empty { text-align: center; color: #4a5568; padding: 40px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 999; }
+  .modal { background: #1e2533; border-radius: 14px; padding: 28px; max-width: 420px; width: 90%; text-align: center; }
+  .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+  .modal p { color: #718096; margin-bottom: 20px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .btn-del { background: #fc8181; color: #0f1117; border: none; border-radius: 8px; padding: 9px 22px; font-weight: 700; cursor: pointer; }
+  .filtri-box { background: #1e2533; border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .filtri-box .form-group { min-width: 120px; }
+  .btn-reset { background: #2d3748; color: #a0aec0; border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 13px; align-self: flex-end; }
+  /* ANALISI */
+  .analisi-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+  .analisi-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .analisi-filters select { background: #1e2533; border: 1px solid #2d3748; border-radius: 8px; padding: 8px 12px; color: #e2e8f0; font-size: 13px; outline: none; }
+  .btn-fetch { background: #63b3ed; color: #0f1117; border: none; border-radius: 8px; padding: 9px 20px; font-weight: 700; font-size: 13px; cursor: pointer; }
+  .btn-fetch:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-ai { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border: none; border-radius: 8px; padding: 9px 20px; font-weight: 700; font-size: 13px; cursor: pointer; display: none; }
+  .btn-ai:disabled { opacity: .5; cursor: not-allowed; }
+  .ai-box { background: #0d1a2e; border: 1px solid #2a4365; border-radius: 12px; padding: 20px; margin-bottom: 20px; display: none; }
+  .ai-box-title { font-weight: 700; color: #63b3ed; margin-bottom: 12px; font-size: 15px; }
+  .ai-risposta { font-size: 14px; line-height: 1.8; color: #e2e8f0; }
+  .match-card { background: #1e2533; border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; }
+  .match-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+  .match-meta { color: #718096; font-size: 12px; margin-bottom: 14px; }
+  .odds-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+  .odd-box { background: #0f1117; border-radius: 10px; padding: 12px; text-align: center; border: 2px solid transparent; transition: .2s; }
+  .odd-box.value-detected { border-color: #48bb78; background: #0d1f14; }
+  .odd-box.odds-dropped { border-color: #f6ad55; background: #1a1500; }
+  .odd-label { font-size: 11px; color: #718096; margin-bottom: 4px; text-transform: uppercase; }
+  .odd-quota { font-size: 22px; font-weight: 800; margin-bottom: 2px; }
+  .odd-prob { font-size: 12px; color: #a0aec0; }
+  .odd-value { font-size: 11px; color: #48bb78; font-weight: 700; margin-top: 4px; }
+  .odd-novalue { font-size: 11px; color: #4a5568; margin-top: 4px; }
+  .odd-movement { font-size: 11px; font-weight: 700; margin-top: 4px; }
+  .btn-add-to-tracker { background: #2d3748; color: #63b3ed; border: none; border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+  .btn-add-to-tracker:hover { background: #63b3ed; color: #0f1117; }
+  .value-explanation { background: #0d1a2e; border: 1px solid #2a4365; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; font-size: 13px; color: #90cdf4; line-height: 1.6; }
+  .calls-left { font-size: 12px; color: #4a5568; }
+  .calls-left span { color: #f6ad55; font-weight: 700; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 3px solid #2d3748; border-top-color: #63b3ed; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* RISK ALERTS */
+  .risk-alert { border-radius: 10px; padding: 12px 18px; margin-bottom: 10px; display: flex; align-items: flex-start; gap: 12px; font-size: 13px; }
+  .risk-alert.danger { background: #2d1515; border: 1px solid #fc8181; color: #fc8181; }
+  .risk-alert.warning { background: #2d2215; border: 1px solid #f6ad55; color: #f6ad55; }
+  .risk-alert.info { background: #152230; border: 1px solid #63b3ed; color: #63b3ed; }
+  .risk-alert-icon { font-size: 20px; line-height: 1; }
+  .risk-alert-title { font-weight: 800; margin-bottom: 3px; }
+  .risk-alert-sub { font-size: 12px; opacity: 0.85; font-weight: 400; }
+  /* KELLY */
+  .kelly-box { background: #0d1a2e; border: 1px solid #2a4365; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .kelly-result { font-size: 28px; font-weight: 800; color: #48bb78; margin: 10px 0; }
+  .kelly-warning { color: #fc8181; font-size: 13px; margin-top: 8px; }
+  /* STATISTICHE */
+  .stats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .stats-table th { color: #718096; font-size: 11px; text-transform: uppercase; padding: 8px 12px; text-align: left; border-bottom: 1px solid #2d3748; }
+  .stats-table td { padding: 10px 12px; border-bottom: 1px solid #1e2533; }
+  .stats-table tr:last-child td { border-bottom: none; }
+  .stats-table tr:hover td { background: #1a2030; }
+  #page-dashboard, #page-scommesse, #page-analisi, #page-statistiche, #page-pro { display: none; }
+  #page-dashboard { display: block; }
+  .pro-match-select { background: #1e2533; border: 1px solid #2d3748; border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; }
+  .pro-score-card { background: #0d1a2e; border: 1px solid #2a4365; border-radius: 14px; padding: 22px 24px; margin-bottom: 16px; }
+  .pro-bar-wrap { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .pro-bar-label { font-size: 13px; font-weight: 700; width: 28px; color: #a0aec0; }
+  .pro-bar-track { flex: 1; background: #0f1117; border-radius: 6px; height: 22px; overflow: hidden; position: relative; }
+  .pro-bar-fill { height: 100%; border-radius: 6px; transition: width .8s cubic-bezier(.4,0,.2,1); display: flex; align-items: center; padding-left: 10px; font-size: 12px; font-weight: 800; color: #0f1117; }
+  .pro-badge { font-size: 11px; font-weight: 700; border-radius: 6px; padding: 3px 10px; white-space: nowrap; }
+  .pro-badge.gioca { background: #1a3a2a; color: #48bb78; border: 1px solid #48bb78; }
+  .pro-badge.attendi { background: #2a2a1a; color: #f6ad55; border: 1px solid #f6ad55; }
+  .pro-badge.evita { background: #2a1a1a; color: #fc8181; border: 1px solid #fc8181; }
+  .pro-components { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap: 8px; margin: 16px 0; }
+  .pro-comp-box { background: #0a1520; border-radius: 8px; padding: 10px 12px; }
+  .pro-comp-label { font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+  .pro-comp-val { font-size: 18px; font-weight: 800; color: #63b3ed; }
+  .pro-comp-weight { font-size: 10px; color: #4a5568; margin-top: 2px; }
+  .pro-signals { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .pro-signal { background: #1a2a3a; color: #90cdf4; font-size: 11px; border-radius: 5px; padding: 3px 10px; }
+  .pro-ritardo-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #1e2533; font-size: 13px; }
+  .pro-ritardo-row:last-child { border-bottom: none; }
+  .pro-form-dots { display: flex; gap: 4px; margin-top: 4px; }
+  .pro-dot { width: 10px; height: 10px; border-radius: 50%; }
+</style>
+</head>
+<body>
 
+<header>
+  <div>
+    <div class="logo">⚽ <span>Tracker</span> Serie B X</div>
+    <div class="sub" id="bankroll-sub">Bankroll: 10€</div>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('dashboard')">📊 Dashboard</button>
+    <button class="tab-btn" onclick="showTab('scommesse')">📋 Scommesse</button>
+    <button class="tab-btn" onclick="showTab('statistiche')">📈 Statistiche</button>
+    <button class="tab-btn" onclick="showTab('analisi')">🔍 Analisi</button>
+    <button class="tab-btn" onclick="showTab('pro')">🎯 Analisi Pro</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- DASHBOARD -->
+  <div id="page-dashboard">
+    <div id="risk-alerts"></div>
+    <div class="stats-grid" id="stats-grid"></div>
+    <div class="card">
+      <div class="card-title">📈 Andamento Bankroll</div>
+      <div id="bankroll-chart"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Ultime scommesse</div>
+      <div id="last-bets"></div>
+    </div>
+  </div>
+
+  <!-- SCOMMESSE -->
+  <div id="page-scommesse">
+    <div class="top-bar">
+      <h2 id="bet-count">Tutte le scommesse</h2>
+      <div class="top-actions">
+        <button class="btn-add" onclick="apriForms('singola')">+ Singola</button>
+        <button class="btn-add-multi" onclick="apriForms('multipla')">+ Multipla</button>
+      </div>
+    </div>
+    <div class="filtri-box">
+      <div class="form-group"><label>📅 Data da</label><input type="date" id="f-dal" oninput="renderScommesse()"></div>
+      <div class="form-group"><label>📅 Data a</label><input type="date" id="f-al" oninput="renderScommesse()"></div>
+      <div class="form-group"><label>🗂️ Categoria</label>
+        <select id="f-cat" oninput="renderScommesse()">
+          <option value="">Tutte</option><option>1X2</option><option>Over/Under</option>
+          <option>Goal/No Goal</option><option>Handicap</option><option value="multipla">Multiple</option>
+        </select>
+      </div>
+      <div class="form-group"><label>🏆 Risultato</label>
+        <select id="f-ris" oninput="renderScommesse()">
+          <option value="">Tutti</option><option>VINTO</option><option>PERSO</option><option>In corso</option>
+        </select>
+      </div>
+      <div class="form-group"><label>💰 Value</label>
+        <select id="f-val" oninput="renderScommesse()">
+          <option value="">Tutti</option><option value="SÌ VALUE">Solo Value</option><option value="NO">Non Value</option>
+        </select>
+      </div>
+      <button class="btn-reset" onclick="resetFiltri()">✕ Reset</button>
+    </div>
+    <div class="form-box" id="form-singola" style="display:none">
+      <div class="form-title" style="color:#63b3ed" id="form-singola-title">➕ Nuova scommessa singola</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Data</label><input type="date" id="s-data"></div>
+        <div class="form-group"><label>Evento</label><input type="text" id="s-evento" placeholder="Es: Napoli vs Roma"></div>
+        <div class="form-group"><label>Quota</label><input type="number" step="0.01" id="s-quota" placeholder="Es: 2.50" oninput="aggiornaProb()"></div>
+        <div class="form-group"><label>Prob. stimata % <span style="color:#63b3ed;font-size:10px">auto</span></label><input type="number" step="1" id="s-prob" placeholder="Es: 55" min="1" max="99"></div>
+        <div class="form-group"><label>Puntata €</label><input type="number" step="0.5" id="s-puntata" placeholder="Es: 10"></div>
+        <div class="form-group"><label>Risultato</label>
+          <select id="s-risultato"><option value="">—</option><option>VINTO</option><option>PERSO</option><option>In corso</option></select>
+        </div>
+        <div class="form-group"><label>Value Bet?</label>
+          <select id="s-value"><option value="">—</option><option>SÌ VALUE</option><option>NO</option></select>
+        </div>
+        <div class="form-group"><label>Categoria</label><input type="text" id="s-categoria" placeholder="Es: 1X2, Over..."></div>
+        <div class="form-group"><label>Campionato</label><input type="text" id="s-campionato" placeholder="Es: Serie A, Premier..."></div>
+        <div class="form-group"><label>Note</label><input type="text" id="s-note" placeholder="Appunti..."></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-save" onclick="salvaSingola()">💾 Salva</button>
+        <button class="btn-cancel" onclick="chiudiForms()">Annulla</button>
+      </div>
+    </div>
+    <div class="form-box" id="form-multipla" style="display:none">
+      <div class="form-title" style="color:#b794f4" id="form-multipla-title">🎯 Nuova multipla</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Data</label><input type="date" id="m-data"></div>
+        <div class="form-group"><label>Puntata €</label><input type="number" step="0.5" id="m-puntata" placeholder="Es: 10" oninput="aggiornaQuotaTotale()"></div>
+        <div class="form-group"><label>Risultato</label>
+          <select id="m-risultato"><option value="">—</option><option>VINTO</option><option>PERSO</option><option>In corso</option></select>
+        </div>
+        <div class="form-group"><label>Note</label><input type="text" id="m-note" placeholder="Appunti..."></div>
+      </div>
+      <div class="multi-section">
+        <div class="multi-section-title">📌 Eventi della multipla</div>
+        <div id="eventi-multipla"></div>
+        <button class="btn-add-event" onclick="aggiungiEventoMultipla()">+ Aggiungi evento</button>
+        <div class="quota-totale" id="quota-totale-display">Quota totale: — | Vincita potenziale: —</div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-save" onclick="salvaMultipla()">💾 Salva multipla</button>
+        <button class="btn-cancel" onclick="chiudiForms()">Annulla</button>
+      </div>
+    </div>
+    <div id="bet-list"></div>
+  </div>
+
+  <!-- STATISTICHE -->
+  <div id="page-statistiche">
+    <div class="kelly-box">
+      <div style="font-weight:700;font-size:15px;color:#48bb78;margin-bottom:14px">🧮 Kelly Criterion — Calcola la puntata ottimale</div>
+      <div style="font-size:13px;color:#718096;margin-bottom:14px;line-height:1.6">
+        Il Kelly Criterion calcola matematicamente quanto puntare in base alla tua probabilità stimata e alla quota. Massimizza la crescita del bankroll nel lungo termine.
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:14px">
+        <div class="form-group"><label>Quota bookmaker</label><input type="number" step="0.01" id="k-quota" placeholder="Es: 2.50" oninput="calcolaKelly()"></div>
+        <div class="form-group"><label>Tua prob. stimata %</label><input type="number" step="1" id="k-prob" placeholder="Es: 55" oninput="calcolaKelly()"></div>
+        <div class="form-group"><label>Bankroll attuale €</label><input type="number" step="1" id="k-bankroll" placeholder="Es: 10" oninput="calcolaKelly()"></div>
+        <div class="form-group"><label>Frazione Kelly %</label>
+          <select id="k-fraz" oninput="calcolaKelly()">
+            <option value="1">100% (aggressivo)</option>
+            <option value="0.5" selected>50% (consigliato)</option>
+            <option value="0.25">25% (conservativo)</option>
+          </select>
+        </div>
+      </div>
+      <div id="kelly-result" style="background:#0f1117;border-radius:10px;padding:14px;display:none">
+        <div style="font-size:12px;color:#718096;margin-bottom:4px">PUNTATA CONSIGLIATA</div>
+        <div class="kelly-result" id="kelly-amount">—</div>
+        <div style="font-size:12px;color:#a0aec0" id="kelly-detail"></div>
+        <div class="kelly-warning" id="kelly-warning"></div>
+      </div>
+    </div>
     <div class="card">
       <div class="card-title">🎯 Calibrazione stime</div>
       <div id="calibrazione-chart"></div>
@@ -1214,72 +1498,71 @@ function calcolaStatSquadra(matches, teamName) {
   };
 }
 
-
 async function avviaAnalisiPro() {
-  const matchId = document.getElementById("pro-match-select").value;
-  const match = ultimiDatiPartite.find(m => m.id === matchId);
-  if (!match) return;
-
+  const sel = document.getElementById("pro-match-select");
+  const idx = parseInt(sel.value);
+  if (isNaN(idx)) return;
+  const match = ultimiDatiPartite[idx];
+  const legaKey = document.getElementById("lega-select")?.value || "";
+  const legaInfo = LEGA_MAP[legaKey];
+  const res = document.getElementById("pro-result");
   const btn = document.getElementById("btn-pro-analizza");
   btn.disabled = true;
-  btn.innerHTML = `<span class="spinner"></span> Analisi in corso...`;
-  
+  btn.innerHTML = '<span class="spinner"></span> Analisi in corso...';
+  res.innerHTML = `<div class="pro-score-card"><div style="color:#718096;font-size:13px"><span class="spinner"></span> Recupero statistiche per <b>${match.home_team}</b> e <b>${match.away_team}</b>...</div></div>`;
+
   try {
-    const statsHome = await fetchTeamStats(match.home_team);
-    const statsAway = await fetchTeamStats(match.away_team);
+    // Quote
+    const allOdds={home:[],away:[],draw:[]};
+    match.bookmakers.forEach(bk=>bk.markets.forEach(mkt=>{if(mkt.key!=="h2h")return;mkt.outcomes.forEach(o=>{if(o.name===match.home_team)allOdds.home.push(o.price);else if(o.name===match.away_team)allOdds.away.push(o.price);else allOdds.draw.push(o.price);});}));
+    const avg=arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:null;
+    const avgH=avg(allOdds.home),avgA=avg(allOdds.away),avgD=avg(allOdds.draw);
 
-    // === CALCOLO POISSON REALE ===
-    let poissonResult = null;
-    if (statsHome && statsAway) {
-      const LEAGUE_AVG = 1.35;
-      const attH = parseFloat(statsHome.goiMedia) || LEAGUE_AVG;
-      const difH = parseFloat(statsHome.goiSubiti) || LEAGUE_AVG;
-      const attA = parseFloat(statsAway.goiMedia) || LEAGUE_AVG;
-      const difA = parseFloat(statsAway.goiSubiti) || LEAGUE_AVG;
-
-      const lambdaHome = (attH / LEAGUE_AVG) * (difA / LEAGUE_AVG) * LEAGUE_AVG * 1.15;
-      const lambdaAway = (attA / LEAGUE_AVG) * (difH / LEAGUE_AVG) * LEAGUE_AVG;
-
-      poissonResult = calcPoisson(lambdaHome, lambdaAway);
-      poissonResult.lambdaHome = lambdaHome.toFixed(2);
-      poissonResult.lambdaAway = lambdaAway.toFixed(2);
+    // Stats reali
+    let statsHome=null, statsAway=null;
+    if (legaInfo) {
+      const [rH,rA] = await Promise.all([fetchSquadraMatches(match.home_team), fetchSquadraMatches(match.away_team)]);
+      if (rH) statsHome = calcolaStatSquadra(rH.matches, match.home_team);
+      if (rA) statsAway = calcolaStatSquadra(rA.matches, match.away_team);
     }
 
-    const avgH = match.bookmakers?.[0]?.markets?.[0]?.outcomes?.find(o => o.name === match.home_team)?.price;
-    const avgD = match.bookmakers?.[0]?.markets?.[0]?.outcomes?.find(o => o.name === "Draw")?.price;
-    const avgA = match.bookmakers?.[0]?.markets?.[0]?.outcomes?.find(o => o.name === match.away_team)?.price;
+    // Prompt Groq
+    const statStr = (label, s) => !s ? `${label}: dati non disponibili` :
+      `${label}: forma=${s.forma.join("-")} | ${s.vinte}V${s.pareggiate}P${s.perse}L | gol segnati/g=${s.goiMedia} subiti/g=${s.goiSubiti} | wrCasa=${s.wrCasa}% wrFuori=${s.wrFuori}% | ritardi: V=${s.ritardoW}pt X=${s.ritardoD}pt L=${s.ritardoL}pt`;
 
-    const prompt = `Analizza questa partita di calcio: ${match.home_team} vs ${match.away_team}.
-DATI REALI (Ultime 10 partite):
-- ${match.home_team}: Gol fatti/match: ${statsHome?.goiMedia || "N/D"}, Gol subiti: ${statsHome?.goiSubiti || "N/D"}
-- ${match.away_team}: Gol fatti/match: ${statsAway?.goiMedia || "N/D"}, Gol subiti: ${statsAway?.goiSubiti || "N/D"}
+    const movH=getOddsMovement(match.id,match.home_team);
+    const movA=getOddsMovement(match.id,match.away_team);
 
-QUOTE mercato: 1=${avgH || "-"} (${avgH?(1/avgH*100).toFixed(1):"-"}%) X=${avgD || "-"} 2=${avgA || "-"}
+    const prompt=`Sei un analista professionista di scommesse. Analizza la partita con tutti i dati e produce uno score finale.
 
-${poissonResult ? `
-PROBABILITÀ POISSON REALI (calcolate su statistiche ultime 10 partite):
-λ home = ${poissonResult.lambdaHome} | λ away = ${poissonResult.lambdaAway}
-Prob 1 = ${(poissonResult.p1*100).toFixed(1)}% | Prob X = ${(poissonResult.pX*100).toFixed(1)}% | Prob 2 = ${(poissonResult.p2*100).toFixed(1)}%
-Edge 1 = ${avgH ? ((poissonResult.p1 - 1/avgH)*100).toFixed(1) : "N/D"}%
-Edge X = ${avgD ? ((poissonResult.pX - 1/avgD)*100).toFixed(1) : "N/D"}%
-Edge 2 = ${avgA ? ((poissonResult.p2 - 1/avgA)*100).toFixed(1) : "N/D"}%
-` : "Statistiche insufficienti per il modello Poisson."}
+PARTITA: ${match.home_team} vs ${match.away_team}
+CAMPIONATO: ${legaInfo?.nome||legaKey}
+QUOTE (media ${match.bookmakers.length} bk): 1=${avgH?.toFixed(2)} (${avgH?(1/avgH*100).toFixed(1):"-"}%) X=${avgD?.toFixed(2)} (${avgD?(1/avgD*100).toFixed(1):"-"}%) 2=${avgA?.toFixed(2)} (${avgA?(1/avgA*100).toFixed(1):"-"}%)
+${statStr(match.home_team, statsHome)}
+${statStr(match.away_team, statsAway)}
+MOVIMENTI: quota1=${movH?(movH.diff<0?"CALO "+movH.pct+"%":"salita "+movH.pct+"%"):"stabile"} quota2=${movA?(movA.diff<0?"CALO "+movA.pct+"%":"salita "+movA.pct+"%"):"stabile"}
 
-Il tuo compito NON è inventare probabilità. Usa SOLO le probabilità Poisson fornite sopra.
-Aggiusta al massimo ±5% in base a contesto qualitativo (infortuni noti, motivazioni, stanchezza).
-Fornisci uno SCORE FINALE (0-100) e un consiglio (Gioca/Attendi/Evita).`;
+Pesi: quote 40% + forma/stats 35% + ritardi 25%.
+IMPORTANTE: i ritardi da soli non aumentano la probabilità. Usali solo se coerenti con la forma reale.
 
-    const aiRes = await callGroq(prompt);
-    renderRisultatoPro(aiRes, match, poissonResult);
+Rispondi SOLO con JSON:
+{"prob_1":45.2,"prob_x":28.5,"prob_2":26.3,"raccomandazione":"1","giudizio":"GIOCA","edge_1":3.2,"edge_x":-1.5,"edge_2":-1.7,"componenti":{"quote_prob_1":42.0,"forma_prob_1":50.0,"ritardo_segnale":"descrizione breve"},"segnali":["segnale1","segnale2"],"ritardi_note":"nota sui ritardi rilevanti","ragionamento":"2-3 frasi","confidenza":"ALTA"}
+giudizio: GIOCA/ATTENDI/EVITA — confidenza: ALTA/MEDIA/BASSA`;
 
-  } catch (err) {
-    console.error(err);
-    alert("Errore nell'analisi Pro.");
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = `🎯 Analizza partita`;
+    const groqResp=await fetch(`${WORKER_URL_PRO}/api/proxy?groq=1`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:GROQ_MODEL,messages:[{role:"user",content:prompt}],max_tokens:1200,temperature:0.2})});
+    if(!groqResp.ok) throw new Error("Groq "+groqResp.status);
+    const groqData=await groqResp.json();
+    const testo=groqData.choices?.[0]?.message?.content||"";
+    let score=null;
+    try{score=JSON.parse(testo.replace(/```json|```/g,"").trim());}catch(e){}
+    if(score) res.innerHTML=renderProScoreCard(match,score,statsHome,statsAway,avgH,avgA,avgD);
+    else res.innerHTML=`<div class="pro-score-card"><div style="color:#fc8181">❌ Errore parsing risposta AI. Riprova.</div><pre style="font-size:10px;color:#718096;white-space:pre-wrap;margin-top:10px">${testo}</pre></div>`;
+  } catch(e) {
+    res.innerHTML=`<div class="pro-score-card"><div style="color:#fc8181">❌ Errore: ${e.message}</div></div>`;
   }
+  btn.disabled=false; btn.innerHTML="🎯 Analizza partita";
 }
+
 function renderProScoreCard(match,score,statsHome,statsAway,avgH,avgA,avgD){
   const gjClass={GIOCA:"gioca",ATTENDI:"attendi",EVITA:"evita"}[score.giudizio]||"attendi";
   const gjEmoji={GIOCA:"✅",ATTENDI:"⏳",EVITA:"❌"}[score.giudizio]||"⏳";
@@ -1377,37 +1660,7 @@ renderAll();
 
 
 
-
-// ===== POISSON ENGINE =====
-function poissonProb(lambda, k) {
-  let logP = k * Math.log(lambda) - lambda;
-  for (let i = 1; i <= k; i++) logP -= Math.log(i);
-  return Math.exp(logP);
-}
-
-function calcPoisson(lambdaHome, lambdaAway, maxGoals = 8) {
-  let p1 = 0, pX = 0, p2 = 0;
-  for (let h = 0; h <= maxGoals; h++) {
-    for (let a = 0; a <= maxGoals; a++) {
-      const p = poissonProb(lambdaHome, h) * poissonProb(lambdaAway, a);
-      if (h > a) p1 += p;
-      else if (h === a) pX += p;
-      else p2 += p;
-    }
-  }
-  return { p1, pX, p2 };
-}
-
-function calcLambda(statsSquadra, isHome) {
-  const LEAGUE_AVG = 1.35;
-  if (!statsSquadra) return LEAGUE_AVG;
-  const attacco = parseFloat(statsSquadra.goiMedia) || LEAGUE_AVG;
-  const difesa  = parseFloat(statsSquadra.goiSubiti) || LEAGUE_AVG;
-  const forzaAttacco = attacco / LEAGUE_AVG;
-  const forzaDifesa  = difesa  / LEAGUE_AVG;
-  return forzaAttacco * LEAGUE_AVG * (isHome ? 1.15 : 1.0); 
-}
-
 </script>
 </body>
 </html>
+
