@@ -1526,6 +1526,23 @@ async function avviaAnalisiPro() {
       if (rA) statsAway = calcolaStatSquadra(rA.matches, match.away_team);
     }
 
+    // === CALCOLO POISSON REALE ===
+    let poissonResult = null;
+    if (statsHome && statsAway) {
+      const LEAGUE_AVG = 1.35;
+      const attH = parseFloat(statsHome.goiMedia) || LEAGUE_AVG;
+      const difH = parseFloat(statsHome.goiSubiti) || LEAGUE_AVG;
+      const attA = parseFloat(statsAway.goiMedia) || LEAGUE_AVG;
+      const difA = parseFloat(statsAway.goiSubiti) || LEAGUE_AVG;
+
+      const lambdaHome = (attH / LEAGUE_AVG) * (difA / LEAGUE_AVG) * LEAGUE_AVG * 1.15;
+      const lambdaAway = (attA / LEAGUE_AVG) * (difH / LEAGUE_AVG) * LEAGUE_AVG;
+
+      poissonResult = calcPoisson(lambdaHome, lambdaAway);
+      poissonResult.lambdaHome = lambdaHome.toFixed(2);
+      poissonResult.lambdaAway = lambdaAway.toFixed(2);
+    }
+
     // Prompt Groq
     const statStr = (label, s) => !s ? `${label}: dati non disponibili` :
       `${label}: forma=${s.forma.join("-")} | ${s.vinte}V${s.pareggiate}P${s.perse}L | gol segnati/g=${s.goiMedia} subiti/g=${s.goiSubiti} | wrCasa=${s.wrCasa}% wrFuori=${s.wrFuori}% | ritardi: V=${s.ritardoW}pt X=${s.ritardoD}pt L=${s.ritardoL}pt`;
@@ -1533,21 +1550,33 @@ async function avviaAnalisiPro() {
     const movH=getOddsMovement(match.id,match.home_team);
     const movA=getOddsMovement(match.id,match.away_team);
 
-    const prompt=`Sei un analista professionista di scommesse. Analizza la partita con tutti i dati e produce uno score finale.
-
-PARTITA: ${match.home_team} vs ${match.away_team}
+    // === TASK 3: PROMPT AGGIORNATO CON DATI REALI ===
+    const prompt = `Analizza questa partita: ${match.home_team} vs ${match.away_team}.
 CAMPIONATO: ${legaInfo?.nome||legaKey}
-QUOTE (media ${match.bookmakers.length} bk): 1=${avgH?.toFixed(2)} (${avgH?(1/avgH*100).toFixed(1):"-"}%) X=${avgD?.toFixed(2)} (${avgD?(1/avgD*100).toFixed(1):"-"}%) 2=${avgA?.toFixed(2)} (${avgA?(1/avgA*100).toFixed(1):"-"}%)
+
+QUOTE mercato: 1=${avgH?.toFixed(2)} (${avgH?(1/avgH*100).toFixed(1):"-"}%) X=${avgD?.toFixed(2)} 2=${avgA?.toFixed(2)}
+
+${poissonResult ? `
+PROBABILITÀ POISSON REALI (Calcolate su statistiche ultime 10 partite):
+λ home = ${poissonResult.lambdaHome} | λ away = ${poissonResult.lambdaAway}
+Prob 1 = ${(poissonResult.p1*100).toFixed(1)}% | Prob X = ${(poissonResult.pX*100).toFixed(1)}% | Prob 2 = ${(poissonResult.p2*100).toFixed(1)}%
+Edge 1 = ${avgH ? ((poissonResult.p1 - 1/avgH)*100).toFixed(1) : "N/D"}%
+Edge X = ${avgD ? ((poissonResult.pX - 1/avgD)*100).toFixed(1) : "N/D"}%
+Edge 2 = ${avgA ? ((poissonResult.p2 - 1/avgA)*100).toFixed(1) : "N/D"}%
+` : "Statistiche insufficienti per il modello Poisson."}
+
+DATI SQUADRE:
 ${statStr(match.home_team, statsHome)}
 ${statStr(match.away_team, statsAway)}
 MOVIMENTI: quota1=${movH?(movH.diff<0?"CALO "+movH.pct+"%":"salita "+movH.pct+"%"):"stabile"} quota2=${movA?(movA.diff<0?"CALO "+movA.pct+"%":"salita "+movA.pct+"%"):"stabile"}
 
-Pesi: quote 40% + forma/stats 35% + ritardi 25%.
-IMPORTANTE: i ritardi da soli non aumentano la probabilità. Usali solo se coerenti con la forma reale.
+REGOLE TASSATIVE:
+1. NON inventare probabilità. Usa come base le probabilità Poisson fornite sopra.
+2. Aggiusta i valori di massimo ±5% in base a contesto qualitativo (infortuni, motivazioni, stanchezza).
+3. Rispondi SOLO con JSON.
 
 Rispondi SOLO con JSON:
-{"prob_1":45.2,"prob_x":28.5,"prob_2":26.3,"raccomandazione":"1","giudizio":"GIOCA","edge_1":3.2,"edge_x":-1.5,"edge_2":-1.7,"componenti":{"quote_prob_1":42.0,"forma_prob_1":50.0,"ritardo_segnale":"descrizione breve"},"segnali":["segnale1","segnale2"],"ritardi_note":"nota sui ritardi rilevanti","ragionamento":"2-3 frasi","confidenza":"ALTA"}
-giudizio: GIOCA/ATTENDI/EVITA — confidenza: ALTA/MEDIA/BASSA`;
+{"prob_1":${(poissonResult?.p1*100 || 33).toFixed(1)},"prob_x":${(poissonResult?.pX*100 || 33).toFixed(1)},"prob_2":${(poissonResult?.p2*100 || 33).toFixed(1)},"raccomandazione":"1","giudizio":"GIOCA","edge_1":0,"edge_x":0,"edge_2":0,"componenti":{"quote_prob_1":0,"forma_prob_1":0,"ritardo_segnale":""},"segnali":[],"ritardi_note":"","ragionamento":"","confidenza":"ALTA"}`;
 
     const groqResp=await fetch(`${WORKER_URL_PRO}/api/proxy?groq=1`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:GROQ_MODEL,messages:[{role:"user",content:prompt}],max_tokens:1200,temperature:0.2})});
     if(!groqResp.ok) throw new Error("Groq "+groqResp.status);
@@ -1659,6 +1688,25 @@ renderAll();
 
 
 
+// ===== POISSON ENGINE =====
+function poissonProb(lambda, k) {
+  let logP = k * Math.log(lambda) - lambda;
+  for (let i = 1; i <= k; i++) logP -= Math.log(i);
+  return Math.exp(logP);
+}
+
+function calcPoisson(lambdaHome, lambdaAway, maxGoals = 8) {
+  let p1 = 0, pX = 0, p2 = 0;
+  for (let h = 0; h <= maxGoals; h++) {
+    for (let a = 0; a <= maxGoals; a++) {
+      const p = poissonProb(lambdaHome, h) * poissonProb(lambdaAway, a);
+      if (h > a) p1 += p;
+      else if (h === a) pX += p;
+      else p2 += p;
+    }
+  }
+  return { p1, pX, p2 };
+}
 
 </script>
 </body>
