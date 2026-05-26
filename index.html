@@ -271,8 +271,8 @@
         <div class="form-group"><label>Frazione Kelly %</label>
           <select id="k-fraz" oninput="calcolaKelly()">
             <option value="1">100% (aggressivo)</option>
-            <option value="0.5" selected>50% (consigliato)</option>
-            <option value="0.25">25% (conservativo)</option>
+            <option value="0.5">50% (moderato)</option>
+            <option value="0.25" selected>25% (consigliato ✓)</option> <!-- FIX 3 -->
           </select>
         </div>
       </div>
@@ -295,8 +295,12 @@
       <div class="card-title">🌍 ROI per campionato</div>
       <div id="roi-campionato"></div>
     </div>
+    <!-- FIX 7: ROI per range quota -->
+    <div class="card">
+      <div class="card-title">📊 ROI per Range Quota</div>
+      <div id="roi-range-quota"></div>
+    </div>
   </div>
-
   <!-- ANALISI -->
   <div id="page-analisi">
     <div class="value-explanation">
@@ -385,7 +389,6 @@
     </div>
   </div>
 </div>
-
 <script>
 const STORAGE_KEY = "scommesse_serieB_v2";
 const BANKROLL_INI = 10;
@@ -398,7 +401,42 @@ let pendingAdd = null, ultimiDatiPartite = [];
 
 function salvaLS() { localStorage.setItem(STORAGE_KEY, JSON.stringify(scommesse)); }
 
-// ===== NOTIFICHE BROWSER =====
+// ===== FIX 1: Blocco segnali duplicati per partita =====
+const ALERT_MATCH_KEY = "alertedMatches_v1";
+const ALERT_COOLDOWN_MS = 3 * 60 * 60 * 1000; // 3 ore
+let alertedMatches = JSON.parse(localStorage.getItem(ALERT_MATCH_KEY) || "{}");
+
+function isMatchAlreadyAlerted(matchId) {
+  const entry = alertedMatches[matchId];
+  if (!entry) return false;
+  if (Date.now() - entry.ts > ALERT_COOLDOWN_MS) {
+    delete alertedMatches[matchId];
+    salvaAlertedMatches();
+    return false;
+  }
+  return true;
+}
+
+function markMatchAlerted(matchId, mercato) {
+  alertedMatches[matchId] = { ts: Date.now(), mercato };
+  salvaAlertedMatches();
+}
+
+function salvaAlertedMatches() {
+  localStorage.setItem(ALERT_MATCH_KEY, JSON.stringify(alertedMatches));
+}
+
+function pulisciAlertScaduti() {
+  let modificato = false;
+  Object.keys(alertedMatches).forEach(id => {
+    if (Date.now() - alertedMatches[id].ts > ALERT_COOLDOWN_MS) {
+      delete alertedMatches[id];
+      modificato = true;
+    }
+  });
+  if (modificato) salvaAlertedMatches();
+}
+
 const NOTIF_SOGLIA = 0.08;
 
 async function richiediPermessoNotifiche() {
@@ -426,22 +464,30 @@ function controllaMovimentiQuote(nuoviDati) {
       const first = hist[0].q, last = hist[hist.length - 1].q;
       const variazione = (last - first) / first;
       if (Math.abs(variazione) >= NOTIF_SOGLIA) {
-        const dir = variazione < 0 ? "📉 CALO" : "📈 SALITA";
-        const pct = (Math.abs(variazione) * 100).toFixed(1);
-        notifiche.push({
-          titolo: `${dir} quota: ${team}`,
-          testo: `${match.home_team} vs ${match.away_team} — quota ${tipo === "home" ? "1" : "2"}: ${last.toFixed(2)} (${variazione < 0 ? "-" : "+"}${pct}%)`
-        });
+        const matchKey = match.id; // FIX 1: chiave per partita, non per team
+        if (!isMatchAlreadyAlerted(matchKey)) {
+          const dir = variazione < 0 ? "📉 CALO" : "📈 SALITA";
+          const pctVal = (Math.abs(variazione) * 100).toFixed(1);
+          notifiche.push({
+            titolo: `${dir} quota: ${team}`,
+            testo: `${match.home_team} vs ${match.away_team} — quota ${tipo === "home" ? "1" : "2"}: ${last.toFixed(2)} (${variazione < 0 ? "-" : "+"}${pctVal}%)`,
+            matchKey,
+            mercato: tipo
+          });
+        }
       }
     });
   });
-  notifiche.slice(0, 3).forEach(n => inviaNotifica(n.titolo, n.testo));
+  // FIX 1: marca come alertata SOLO le partite che effettivamente mandiamo
+  notifiche.slice(0, 3).forEach(n => {
+    inviaNotifica(n.titolo, n.testo);
+    markMatchAlerted(n.matchKey, n.mercato);
+  });
   return notifiche.length;
 }
 function salvaOddsHistory() { localStorage.setItem(ODDS_HISTORY_KEY, JSON.stringify(oddsHistory)); }
 function fmt(n) { return Number(n).toFixed(2); }
 function pct(n) { return Number(n).toFixed(1) + "%"; }
-
 // ===== STATS =====
 function calcStats() {
   const vinte = scommesse.filter(s => s.risultato === "VINTO");
@@ -491,15 +537,25 @@ function calcolaKelly() {
     document.getElementById("kelly-amount").style.color = "#fc8181";
     document.getElementById("kelly-detail").textContent = "Questa scommessa non ha valore atteso positivo.";
     warn.textContent = "⚠️ Kelly negativo: la quota non giustifica la probabilità stimata.";
+    warn.style.color = "#fc8181";
   } else {
     document.getElementById("kelly-amount").textContent = fmt(puntata) + "€";
     document.getElementById("kelly-amount").style.color = "#48bb78";
     document.getElementById("kelly-detail").textContent =
       `Kelly pieno: ${pct(kelly * 100)} del bankroll | Frazionato ${fraz*100}%: ${fmt(puntata)}€`;
-    warn.textContent = kelly > 0.3 ? "⚠️ Kelly alto — usa la frazione al 25% per ridurre il rischio." : "";
+    // FIX 3: warning a 3 livelli invece di soglia fissa 0.3
+    if (kelly > 0.5) {
+      warn.textContent = "🔴 Kelly molto alto — rischio elevato, usa 25% fractional.";
+      warn.style.color = "#fc8181";
+    } else if (kelly > 0.25) {
+      warn.textContent = "⚠️ Kelly alto — considera il 25% fractional per proteggere il bankroll.";
+      warn.style.color = "#f6ad55";
+    } else {
+      warn.textContent = "✅ Kelly nella norma con frazione al 25%.";
+      warn.style.color = "#48bb78";
+    }
   }
 }
-
 // ===== ROI PER CATEGORIA E CAMPIONATO =====
 function calcRoiPerGruppo(campo) {
   const gruppi = {};
@@ -561,8 +617,34 @@ function renderCalibrazione() {
     }).join("")}`;
 }
 
+// FIX 7: funzione ROI per range quota — aggiungila PRIMA di renderStatistiche
+function calcRoiPerRangeQuota() {
+  const ranges = [
+    { label: "Bassa (1.01–1.50)", min: 1.01, max: 1.50 },
+    { label: "Media (1.51–2.50)", min: 1.51, max: 2.50 },
+    { label: "Alta (2.51–4.00)",  min: 2.51, max: 4.00 },
+    { label: "Speculativa (4.01–10.00)", min: 4.01, max: 10.00 }, // FIX 2: cap a 10
+  ];
+  const risultato = {};
+  ranges.forEach(r => { risultato[r.label] = { vinte: 0, perse: 0, puntato: 0, utile: 0 }; });
+  scommesse.filter(s => s.risultato === "VINTO" || s.risultato === "PERSO").forEach(s => {
+    const q = s.tipo === "multipla" ? parseFloat(s.quotaTotale) : parseFloat(s.quota);
+    const p = parseFloat(s.puntata) || 0;
+    if (isNaN(q)) return;
+    const range = ranges.find(r => q >= r.min && q <= r.max);
+    if (!range) return;
+    const key = range.label;
+    risultato[key].puntato += p;
+    if (s.risultato === "VINTO") { risultato[key].vinte++; risultato[key].utile += (q - 1) * p; }
+    else { risultato[key].perse++; risultato[key].utile -= p; }
+  });
+  return risultato;
+}
+
 function renderStatistiche() {
   renderCalibrazione();
+
+  // ROI per categoria
   const catGruppi = calcRoiPerGruppo("categoria");
   const catEl = document.getElementById("roi-categoria");
   if (!Object.keys(catGruppi).length) { catEl.innerHTML = '<div class="empty">Nessun dato disponibile ancora.</div>'; }
@@ -577,6 +659,8 @@ function renderStatistiche() {
         <td style="color:${roiColor};font-weight:700">${roi >= 0 ? "+" : ""}${pct(roi)}</td><td>${pct(wr)}</td></tr>`;
     }).join("")}</tbody></table>`;
   }
+
+  // ROI per campionato
   const campGruppi = calcRoiPerGruppo("campionato");
   const campEl = document.getElementById("roi-campionato");
   if (!Object.keys(campGruppi).length) { campEl.innerHTML = '<div class="empty">Nessun dato — aggiungi il campo "Campionato" nelle scommesse.</div>'; }
@@ -591,6 +675,29 @@ function renderStatistiche() {
         <td style="color:${roiColor};font-weight:700">${roi >= 0 ? "+" : ""}${pct(roi)}</td><td>${pct(wr)}</td></tr>`;
     }).join("")}</tbody></table>`;
   }
+
+  // FIX 7: ROI per range quota
+  const rangeGruppi = calcRoiPerRangeQuota();
+  const rangeEl = document.getElementById("roi-range-quota");
+  if (rangeEl) {
+    const hasDati = Object.values(rangeGruppi).some(v => v.puntato > 0);
+    if (!hasDati) {
+      rangeEl.innerHTML = '<div class="empty">Nessun dato ancora.</div>';
+    } else {
+      rangeEl.innerHTML = `<table class="stats-table"><thead><tr><th>Range Quota</th><th>V/P</th><th>Puntato</th><th>Utile</th><th>ROI</th></tr></thead><tbody>
+      ${Object.entries(rangeGruppi).map(([k, v]) => {
+        if (v.puntato === 0) return `<tr><td style="font-weight:600">${k}</td><td colspan="4" style="color:#4a5568">Nessuna scommessa</td></tr>`;
+        const roi = v.utile / v.puntato * 100;
+        const roiColor = roi >= 0 ? "#48bb78" : "#fc8181";
+        return `<tr><td style="font-weight:600">${k}</td>
+          <td><span style="color:#48bb78">${v.vinte}V</span> / <span style="color:#fc8181">${v.perse}P</span></td>
+          <td>${fmt(v.puntato)}€</td>
+          <td style="color:${roiColor};font-weight:700">${v.utile >= 0 ? "+" : ""}${fmt(v.utile)}€</td>
+          <td style="color:${roiColor};font-weight:700">${roi >= 0 ? "+" : ""}${pct(roi)}</td></tr>`;
+      }).join("")}</tbody></table>`;
+    }
+  }
+
   const st = calcStats();
   const kb = document.getElementById("k-bankroll");
   if (!kb.value) kb.value = fmt(st.bankroll);
@@ -721,28 +828,58 @@ function hideChartTooltip() {
   if (t) t.style.display = "none";
 }
 
+function hideChartTooltip() {
+  const t = document.getElementById("chart-tooltip");
+  if (t) t.style.display = "none";
+}
+
 // ===== RISK ALERTS =====
 const SOGLIA_DRAWDOWN = 0.20, SOGLIA_SERIE_NEG = 3, SOGLIA_ESPOSIZIONE = 0.10;
+const STOP_LOSS_GIORNALIERO_PCT = 0.10; // FIX 4
+
+function getPerditaOggi() {
+  const oggi = new Date().toISOString().slice(0, 10);
+  return scommesse
+    .filter(s => s.data === oggi && s.risultato === "PERSO")
+    .reduce((tot, s) => tot + (parseFloat(s.puntata) || 0), 0);
+}
 
 function calcRiskAlerts(st) {
   const alerts = [];
+
+  // FIX 4: stop-loss giornaliero — primo controllo, priorità massima
+  const perditaOggi = getPerditaOggi();
+  const limiteGiornaliero = st.bankroll * STOP_LOSS_GIORNALIERO_PCT;
+  if (perditaOggi >= limiteGiornaliero) {
+    alerts.push({ tipo:"danger", icon:"🛑", titolo:`STOP-LOSS GIORNALIERO — Perso ${fmt(perditaOggi)}€ oggi`, sub:`Limite giornaliero (${(STOP_LOSS_GIORNALIERO_PCT*100)}% bankroll = ${fmt(limiteGiornaliero)}€) raggiunto. Stop alle scommesse per oggi.` });
+  } else if (perditaOggi > limiteGiornaliero * 0.7) {
+    alerts.push({ tipo:"warning", icon:"⚠️", titolo:`Stop-loss al ${((perditaOggi/limiteGiornaliero)*100).toFixed(0)}% — Perso oggi: ${fmt(perditaOggi)}€`, sub:`Ti stai avvicinando al limite giornaliero di ${fmt(limiteGiornaliero)}€. Procedi con cautela.` });
+  }
+
+  // drawdown globale
   const drawdown = (BANKROLL_INI - st.bankroll) / BANKROLL_INI;
   if (drawdown >= SOGLIA_DRAWDOWN) {
     alerts.push({ tipo:"danger", icon:"🔴", titolo:`Drawdown critico: -${(drawdown*100).toFixed(1)}%`, sub:`Hai perso ${fmt(BANKROLL_INI - st.bankroll)}€. Considera di ridurre le puntate.` });
   } else if (drawdown >= SOGLIA_DRAWDOWN * 0.6) {
     alerts.push({ tipo:"warning", icon:"🟡", titolo:`Drawdown in crescita: -${(drawdown*100).toFixed(1)}%`, sub:`Ti stai avvicinando alla soglia del 20%. Attenzione.` });
   }
+
+  // serie negativa
   const risolte = scommesse.filter(s => s.risultato === "VINTO" || s.risultato === "PERSO");
   let serieNeg = 0;
   for (let i = risolte.length - 1; i >= 0; i--) { if (risolte[i].risultato === "PERSO") serieNeg++; else break; }
   if (serieNeg >= SOGLIA_SERIE_NEG) alerts.push({ tipo:"danger", icon:"📉", titolo:`Serie negativa: ${serieNeg} sconfitte di fila`, sub:`Valuta una pausa o riduci le puntate.` });
+
+  // esposizione ultima puntata
   if (scommesse.length > 0) {
     const ultima = scommesse[scommesse.length - 1];
     const puntata = parseFloat(ultima.puntata) || 0;
     if ((puntata / st.bankroll) > SOGLIA_ESPOSIZIONE && ultima.risultato === "In corso")
       alerts.push({ tipo:"warning", icon:"⚠️", titolo:`Puntata alta: ${fmt(puntata/st.bankroll*100)}% del bankroll`, sub:`La tua ultima puntata (${fmt(puntata)}€) supera il 10% del bankroll.` });
   }
-  const ultime10 = scommesse.filter(s => s.risultato === "VINTO" || s.risultato === "PERSO").slice(-10);
+
+  // ROI recente
+  const ultime10 = risolte.slice(-10);
   if (ultime10.length >= 5) {
     const puntato = ultime10.reduce((a,s) => a+(parseFloat(s.puntata)||0), 0);
     const vinto = ultime10.filter(s=>s.risultato==="VINTO").reduce((a,s) => { const q=s.tipo==="multipla"?parseFloat(s.quotaTotale):parseFloat(s.quota); return a+(q-1)*(parseFloat(s.puntata)||0); }, 0);
@@ -750,6 +887,7 @@ function calcRiskAlerts(st) {
     const roiRecente = puntato > 0 ? ((vinto-perso)/puntato*100) : 0;
     if (roiRecente < -15) alerts.push({ tipo:"info", icon:"📊", titolo:`ROI recente negativo: ${roiRecente.toFixed(1)}%`, sub:`Ultime ${ultime10.length} scommesse sotto -15%. Analizza la strategia.` });
   }
+
   return alerts;
 }
 
@@ -983,6 +1121,7 @@ async function attivaNotifiche() {
 
 // ===== FETCH QUOTE CON PROXY CLOUDFLARE =====
 async function fetchOdds() {
+  pulisciAlertScaduti(); // FIX 1
   const lega=document.getElementById("lega-select").value;
   const btn=document.getElementById("btn-fetch");
   const res=document.getElementById("analisi-results");
@@ -1006,12 +1145,17 @@ async function fetchOdds() {
     const used = r.headers.get("x-requests-used");
     if (rem !== null) document.getElementById("calls-left").innerHTML=`Chiamate rimaste: <span>${rem}</span> / usate: <span>${used}</span>`;
     if (!data.length) { res.innerHTML='<div class="card empty">Nessuna partita disponibile.</div>'; return; }
+
     const now = Date.now();
+    const MAX_QUOTA = 10.0; // FIX 2
+    let quoteFiltrateCount = 0; // FIX 2: counter per debug
+
     data.forEach(match => {
       match.bookmakers.forEach(bk => {
         bk.markets.forEach(mkt => {
           if (mkt.key !== "h2h") return;
           mkt.outcomes.forEach(o => {
+            if (o.price > MAX_QUOTA) { quoteFiltrateCount++; return; } // FIX 2: salta quote assurde
             const hKey = `${match.id}_${o.name}`;
             if (!oddsHistory[hKey]) oddsHistory[hKey] = [];
             oddsHistory[hKey].push({t: now, q: o.price});
@@ -1020,11 +1164,18 @@ async function fetchOdds() {
         });
       });
     });
+
     salvaOddsHistory();
     controllaMovimentiQuote(data);
     ultimiDatiPartite = data;
     document.getElementById("btn-ai").style.display = "inline-block";
-    res.innerHTML = data.map(match => buildMatchCard(match)).join("");
+
+    // FIX 2: mostra quante quote sono state filtrate (opzionale, utile per debug)
+    const filterMsg = quoteFiltrateCount > 0
+      ? `<div style="font-size:11px;color:#f6ad55;margin-bottom:10px">⚠️ ${quoteFiltrateCount} quota/e anomale (>10.0) escluse dall'analisi</div>`
+      : "";
+    res.innerHTML = filterMsg + data.map(match => buildMatchCard(match)).join("");
+
   } catch(e) {
     res.innerHTML=`<div class="card empty" style="color:#fc8181">❌ Errore: ${e.message}</div>`;
   }
@@ -1338,18 +1489,22 @@ function buildMatchCard(match) {
   const dataStr=dt.toLocaleDateString("it-IT")+" "+dt.toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"});
   const allOdds={home:[],away:[],draw:[]};
   const bkNames=[];
+
   match.bookmakers.forEach(bk=>{
     bkNames.push(bk.title);
     bk.markets.forEach(mkt=>{
       if (mkt.key!=="h2h") return;
       mkt.outcomes.forEach(o=>{
+        if (o.price > 10.0) return; // FIX 2: salta quote assurde
         if (o.name===match.home_team) allOdds.home.push(o.price);
         else if (o.name===match.away_team) allOdds.away.push(o.price);
         else allOdds.draw.push(o.price);
       });
     });
   });
+
   if (!allOdds.home.length) return "";
+
   const maxH=Math.max(...allOdds.home),maxA=Math.max(...allOdds.away);
   const maxD=allOdds.draw.length?Math.max(...allOdds.draw):null;
   const avgH=allOdds.home.reduce((a,b)=>a+b,0)/allOdds.home.length;
@@ -1358,16 +1513,29 @@ function buildMatchCard(match) {
   const probH=(1/avgH*100),probA=(1/avgA*100),probD=avgD?(1/avgD*100):0;
   const isValH=maxH>avgH*1.04,isValA=maxA>avgA*1.04,isValD=avgD&&maxD>avgD*1.04;
   const edge=(mx,avg)=>mx>0&&avg>0?(((1/avg)-(1/mx))*100).toFixed(1):null;
+
+  // FIX 6: calcola overround e verifica coerenza probabilità
+  const overround = avgD
+    ? (1/avgH) + (1/avgD) + (1/avgA)
+    : (1/avgH) + (1/avgA);
+  const overroundPct = ((overround - 1) * 100).toFixed(1);
+  const overroundAnomalo = overround > 1.10;
+  const overroundBadge = overroundAnomalo
+    ? `<div style="background:#2d1515;border:1px solid #fc8181;border-radius:8px;padding:6px 12px;font-size:11px;color:#fc8181;margin-bottom:10px">⚠️ Overround anomalo: ${overroundPct}% — dati poco affidabili, valuta con cautela</div>`
+    : `<div style="color:#4a5568;font-size:11px;margin-bottom:10px">Margine bookie: ${overroundPct}%</div>`;
+
   const movH=getOddsMovement(match.id,match.home_team);
   const movA=getOddsMovement(match.id,match.away_team);
   const isDropH=movH&&movH.diff<-0.05;
   const isDropA=movA&&movA.diff<-0.05;
+
   const movHtml=(mov)=>{
     if (!mov) return "";
     if (mov.diff<-0.05) return `<div class="odd-movement" style="color:#f6ad55">📉 ${mov.pct}% (soldi in entrata)</div>`;
     if (mov.diff>0.05) return `<div class="odd-movement" style="color:#718096">📈 +${mov.pct}%</div>`;
     return "";
   };
+
   const oddBox=(label,max,prob,isVal,edgeVal,payload,mov,isDrop,teamName)=>`
     <div class="odd-box ${isVal?"value-detected":isDrop?"odds-dropped":""}">
       <div class="odd-label">${label}</div>
@@ -1378,9 +1546,11 @@ function buildMatchCard(match) {
       ${miniChartQuota(match.id, teamName)}
       <button class="btn-add-to-tracker" onclick='apriModalAdd(${JSON.stringify(payload)})'>+ Tracker</button>
     </div>`;
+
   return `<div class="match-card">
     <div class="match-title">${match.home_team} vs ${match.away_team}</div>
     <div class="match-meta">📅 ${dataStr} · ${bkNames.length} bookmaker</div>
+    ${overroundBadge}
     <div class="odds-grid">
       ${oddBox("1 — "+match.home_team.split(" ").pop(),maxH,probH,isValH,edge(maxH,avgH),{evento:match.home_team+" vs "+match.away_team,quota:maxH,esito:"1 — "+match.home_team,isValue:isValH,prob:probH/100},movH,isDropH,match.home_team)}
       ${maxD!==null?oddBox("X — Pareggio",maxD,probD,isValD,edge(maxD,avgD),{evento:match.home_team+" vs "+match.away_team,quota:maxD,esito:"X — Pareggio",isValue:isValD,prob:probD/100},null,false,"Draw"):""}
@@ -1388,7 +1558,6 @@ function buildMatchCard(match) {
     </div>
   </div>`;
 }
-
 function apriModalAdd(data) {
   pendingAdd=data;
   const st=calcStats();
