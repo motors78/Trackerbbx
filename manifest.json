@@ -4,8 +4,8 @@
   "description": "Tracker scommesse con analisi quote e AI",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f1117",
-  "theme_color": "#63b3ed",
+  "background_color": "#080a0d",
+  "theme_color": "#f4c430",
   "orientation": "portrait",
   "icons": [
     {
