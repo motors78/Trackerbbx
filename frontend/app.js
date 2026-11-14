@@ -1441,37 +1441,7 @@ function renderProScoreCard(match,score,statsHome,statsAway,avgH,avgA,avgD){
   </div>`;
 }
 
-// ===== TELEGRAM ALERT =====
-const alertInviati = new Set();
-
-async function inviaAlertTelegram(pick) {
-  const chiave = `${pick.partita}_${pick.esito}_${new Date().toLocaleDateString("it-IT")}`;
-  if (alertInviati.has(chiave)) {
-    console.log("[Telegram] Alert già inviato, skip:", chiave);
-    return;
-  }
-  alertInviati.add(chiave);
-  try {
-    await fetch("/api/proxy?action=telegram", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        homeTeam:    pick.partita.split(" vs ")[0] || pick.partita,
-        awayTeam:    pick.partita.split(" vs ")[1] || "",
-        league:      document.getElementById("lega-select")?.options[document.getElementById("lega-select")?.selectedIndex]?.text || "—",
-        market:      pick.descrizione_esito || pick.esito,
-        poissonProb: (pick.prob_stimata || 0) / 100,
-        bookOdds:    pick.quota_consigliata || 0,
-        edge:        (pick.edge || 0) / 100,
-        kellyStake:  (pick.kelly_puntata || 0) / calcStats().bankroll,
-        matchTime:   new Date().toLocaleDateString("it-IT"),
-      }),
-    });
-    console.log("[Telegram] Alert inviato:", pick.partita);
-  } catch(e) {
-    console.error("[Telegram] Errore:", e);
-  }
-}
+// ===== TELEGRAM ALERT: vedi frontend/telegram-alert.js =====
 renderAll();
 
 
