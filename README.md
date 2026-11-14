@@ -19,7 +19,9 @@ La documentazione Cloudflare descrive il routing Pages Functions dal percorso de
 - `frontend/styles.css`: tema Gotham nero/oro e componenti UI.
 - `functions/api/proxy.js`: gateway allowlistato Cloudflare Pages.
 - `_headers`, `_routes.json`, `wrangler.jsonc`: header statici, routing API e configurazione Pages.
+- `frontend/telegram-alert.js`: invio avvisi Telegram dal browser (registra l'avviso solo se il server conferma).
 - `tests/imparato-tecnica.test.js`: test funzionale browserless.
+- `tests/proxy-hardening.test.mjs`, `tests/telegram-alert.test.js`: test di Telegram, limiti/timeout upstream, validazione input, rate limit.
 
 ## Secret Cloudflare
 
@@ -52,4 +54,18 @@ Il sorgente del Worker `tracker-proxy.becchinigiuseppe.workers.dev` non era nel 
 
 ## Test e limiti
 
-Eseguire `node tests/imparato-tecnica.test.js`, `node tests/cloudflare-function.test.mjs`, `node --check frontend/app.js` e `node --check frontend/imparato-tecnica.js`. Il test Cloudflare importa il sorgente ESM e verifica route, metodo, input, CORS e risposta senza secret. I provider live richiedono i secret configurati. Le richieste API non sono disponibili aprendo direttamente il file HTML.
+Eseguire `node tests/imparato-tecnica.test.js`, `node tests/cloudflare-function.test.mjs`, `node tests/proxy-hardening.test.mjs`, `node tests/telegram-alert.test.js`, `node --check frontend/app.js` e `node --check frontend/imparato-tecnica.js`. Il test Cloudflare importa il sorgente ESM e verifica route, metodo, input, CORS e risposta senza secret. I provider live richiedono i secret configurati. Le richieste API non sono disponibili aprendo direttamente il file HTML.
+
+## Hardening API (branch `fix/api-backend-hardening`)
+
+- **Telegram**: l'avviso è considerato inviato solo con HTTP 2xx **e** `{ ok: true }` nel body di Telegram. Altrimenti `/api/proxy?action=telegram` risponde 502 (429 con `Retry-After` se Telegram limita) e il client non registra l'avviso, quindi può riprovare. Il token del bot non compare mai nelle risposte.
+- **`fetchJSON()`**: il body upstream è letto a blocchi e interrotto non appena supera 2 MB (o se `content-length` dichiara di più); il timeout di 12 s copre anche la lettura del body. Errori distinti: 504 timeout, 502 risposta troppo grande / non valida (JSON o UTF-8) / provider non raggiungibile. Gli errori del provider diventano 502 (429 resta 429).
+- **Input**: le POST richiedono `Content-Type: application/json` (415 altrimenti) e un oggetto JSON; messaggi AI con ruolo in `system|user|assistant` e solo `role`/`content` inoltrati; campi Telegram validati (tipo, lunghezza, intervallo numerico) e senza caratteri di controllo.
+- **Cross-site**: le richieste del browser con `Origin` diversa o `Sec-Fetch-Site: cross-site` ricevono 403 prima di consumare quota o rate limit.
+- **Rate limit**: superati 10.000 bucket vengono eliminati i più vecchi invece di rispondere 429 a tutti.
+
+### Limiti noti (nessuna configurazione nuova introdotta)
+
+- `/api/proxy` resta pubblico: chi conosce l'URL può chiamare direttamente `ai` e `telegram` (con rate limit per IP, ma senza autenticazione). Per chiuderlo servono un'autenticazione (es. Cloudflare Access sul dominio o un secret condiviso) e/o una regola WAF Rate Limiting: sono modifiche di configurazione che richiedono una tua decisione.
+- Il rate limit in memoria è per isolate e non sostituisce la regola WAF consigliata sopra.
+- La Cache API è locale al data center: nessun comportamento di cache è stato modificato.
